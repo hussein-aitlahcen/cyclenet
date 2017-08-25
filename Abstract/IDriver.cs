@@ -1,6 +1,6 @@
 using System;
 
-namespace Cycle.Net.Driver
+namespace Cycle.Net.Abstract
 {
     public interface IDriver : IObserver<IRequest>, IObservable<IResponse>
     {

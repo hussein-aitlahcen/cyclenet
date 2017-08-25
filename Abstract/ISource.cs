@@ -1,7 +1,6 @@
 using System.Collections.Generic;
-using Cycle.Net.Driver;
 
-namespace Cycle.Net
+namespace Cycle.Net.Abstract
 {
     public interface ISource
     {

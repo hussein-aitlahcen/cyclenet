@@ -1,7 +1,6 @@
 using System;
-using Cycle.Net.Driver;
 
-namespace Cycle.Net
+namespace Cycle.Net.Abstract
 {
     public interface ISink : IObservable<IEnvelope>
     {
