@@ -7,7 +7,7 @@ using Cycle.Net.Driver;
 
 namespace Cycle.Net
 {
-    public class CycleNet<TSource, TSink> : IObserver<IRequest>, IObservable<IEnvelope>
+    public class CycleNet<TSource, TSink> : IObserver<IEnvelope>, IObservable<IEnvelope>
         where TSource : ISource
         where TSink : ISink
     {
@@ -36,8 +36,8 @@ namespace Cycle.Net
         public void OnError(Exception error) =>
             m_observers.ForEach(observer => observer.OnError(error));
 
-        public void OnNext(IRequest value) =>
-            m_observers.ForEach(observer => observer.OnNext(value.Request));
+        public void OnNext(IEnvelope value) =>
+            m_observers.ForEach(observer => observer.OnNext(value));
 
         public IDisposable Subscribe(IObserver<IEnvelope> observer)
         {

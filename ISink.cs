@@ -3,7 +3,7 @@ using Cycle.Net.Driver;
 
 namespace Cycle.Net
 {
-    public interface ISink : IObservable<IRequest>
+    public interface ISink : IObservable<IEnvelope>
     {
     }
 }
