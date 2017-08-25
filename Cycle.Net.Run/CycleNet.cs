@@ -26,13 +26,13 @@ namespace Cycle.Net.Run
             m_observers = new List<IObserver<IRequest>>();
         }
 
-        public void Run(Func<TSource, IObservable<IRequest>> mainFunction)
+        public void Run(Func<TSource, IObservable<IRequest>> main)
         {
             foreach (var driver in m_source.GetDrivers())
             {
                 Subscribe(driver);
             }
-            mainFunction(m_source).Subscribe(this);
+            main(m_source).Subscribe(this);
             m_start = false;
             while (m_buffer.Count > 0)
             {

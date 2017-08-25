@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.Reactive.Concurrency;
 using System.Reactive.Disposables;
+using System.Reactive.Linq;
 using Cycle.Net.Run.Abstract;
 
 namespace Cycle.Net.Sample
@@ -17,12 +19,15 @@ namespace Cycle.Net.Sample
         public string Content { get; set; }
     }
 
-    public sealed class HttpDriver : AbstractDriver
+    public sealed class HttpDriver : AbstractDriver, IObserver<HttpResponse>
     {
         public static string ID => "http-driver";
 
-        public HttpDriver() : base(ID)
+        private readonly IScheduler m_scheduler;
+
+        public HttpDriver(IScheduler sheduler) : base(ID)
         {
+            m_scheduler = sheduler;
         }
 
         public override void OnNext(IRequest value)
@@ -31,13 +36,23 @@ namespace Cycle.Net.Sample
             {
                 case HttpRequest httpRequest:
                     // Our driver should retrieve the content from the URL
-                    Dispatch(new HttpResponse
-                    {
-                        Origin = httpRequest,
-                        Content = "content"
-                    });
+                    var client = new System.Net.Http.HttpClient();
+                    Observable.FromAsync(() => client.GetStringAsync(httpRequest.Url))
+                        .Select(content => new HttpResponse
+                        {
+                            Origin = httpRequest,
+                            Content = content
+                        })
+                        .ObserveOn(m_scheduler)
+                        .Subscribe(this);
                     break;
             }
+        }
+
+        public void OnNext(HttpResponse value)
+        {
+            Console.WriteLine("callback thread: " + Environment.CurrentManagedThreadId);
+            Dispatch(value);
         }
     }
 }
