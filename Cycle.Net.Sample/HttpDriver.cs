@@ -35,7 +35,6 @@ namespace Cycle.Net.Sample
             switch (value)
             {
                 case HttpRequest httpRequest:
-                    // Our driver should retrieve the content from the URL
                     var client = new System.Net.Http.HttpClient();
                     Observable.FromAsync(() => client.GetStringAsync(httpRequest.Url))
                         .Select(content => new HttpResponse
@@ -51,7 +50,6 @@ namespace Cycle.Net.Sample
 
         public void OnNext(HttpResponse value)
         {
-            Console.WriteLine("callback thread: " + Environment.CurrentManagedThreadId);
             Dispatch(value);
         }
     }

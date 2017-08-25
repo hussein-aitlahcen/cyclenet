@@ -31,13 +31,11 @@ namespace Cycle.Net.Sample
 
         static IObservable<IRequest> Flow(SimpleSource source)
         {
-            Console.WriteLine("starting threadId: " + Environment.CurrentManagedThreadId);
-
-            var stream = source.GetDriver(HttpDriver.ID)
+            var httpSource = source.GetDriver(HttpDriver.ID)
                 .OfType<HttpResponse>()
                 .StartWith(InitialResponse);
 
-            IObservable<IRequest> firstStep = stream.Where(response => response == InitialResponse)
+            var firstStep = httpSource.Where(response => response == InitialResponse)
                 .Do(response => Console.WriteLine("fetching posts"))
                 .Select(response => new HttpRequest
                 {
@@ -45,7 +43,7 @@ namespace Cycle.Net.Sample
                     Url = "https://jsonplaceholder.typicode.com/posts"
                 });
 
-            IObservable<IRequest> secondStep = stream.Where(response => response.Origin.Id == "posts")
+            var secondStep = httpSource.Where(response => response.Origin.Id == "posts")
                 .Do(response => Console.WriteLine("posts fetched, fetching users"))
                 .Select(response => new HttpRequest
                 {
@@ -53,7 +51,7 @@ namespace Cycle.Net.Sample
                     Url = "https://jsonplaceholder.typicode.com/users"
                 });
 
-            IObservable<IRequest> thirdStep = stream.Where(response => response.Origin.Id == "users")
+            var thirdStep = httpSource.Where(response => response.Origin.Id == "users")
                 .Do(response => Console.WriteLine("users fetched, fetching comments"))
                 .Select(response => new HttpRequest
                 {
@@ -61,11 +59,11 @@ namespace Cycle.Net.Sample
                     Url = "https://jsonplaceholder.typicode.com/comments"
                 });
 
-            IObservable<IRequest> lastStep = stream.Where(response => response.Origin.Id == "comments")
+            var lastStep = httpSource.Where(response => response.Origin.Id == "comments")
                 .Do(response => Console.WriteLine("comments fetched"))
                 .Select(response => EmptyRequest.Instance);
 
-            return Observable.Merge(firstStep, secondStep, thirdStep, lastStep);
+            return Observable.Merge<IRequest>(firstStep, secondStep, thirdStep, lastStep);
         }
     }
 }
