@@ -51,16 +51,14 @@ namespace Cycle.Net.Sample
                     (response, state) => new LogRequest($"nb of response: {state.Responses.Count}, data received: {response}")
                 );
 
-            var fetchPosts = stateStream.Where(state => state.Responses.Count == 0)
-                .Select(state => RequestPosts);
+            var fetchStream = stateStream.Where(state => state.Responses.Count == 0)
+                .SelectMany(state => new IRequest[]{
+                    RequestPosts,
+                    RequestUsers,
+                    RequestComments
+                }.ToObservable());
 
-            var fetchUsers = stateStream.Where(state => state.Responses.Count == 1)
-                .Select(state => RequestUsers);
-
-            var fetchComments = stateStream.Where(state => state.Responses.Count == 2)
-                .Select(state => RequestComments);
-
-            return Observable.Merge<IRequest>(logStream, fetchPosts, fetchUsers, fetchComments);
+            return Observable.Merge<IRequest>(logStream, fetchStream);
         }
     }
 }
