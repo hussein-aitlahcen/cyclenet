@@ -43,14 +43,11 @@ namespace Cycle.Net.Sample
         public static Func<IObservable<IRequest>, IObservable<IResponse>> Create(IScheduler scheduler) =>
             requests => requests
                 .OfType<HttpRequest>()
-                .SelectMany(request =>
-                {
-                    var client = new HttpClient();
-                    return Observable.FromAsync(() => client.GetStringAsync(request.Url))
-                        .Select(content =>
-                        {
-                            return new HttpResponse(request, content);
-                        });
-                });
+                .SelectMany
+                (
+                    request => Observable
+                        .FromAsync(() => new HttpClient().GetStringAsync(request.Url))
+                        .Select(content => new HttpResponse(request, content))
+                );
     }
 }
