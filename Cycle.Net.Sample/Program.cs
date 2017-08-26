@@ -40,8 +40,7 @@ namespace Cycle.Net.Sample
 
         static IObservable<State> StateStream(IObservable<HttpResponse> httpStream) =>
             httpStream
-                .Scan(State.Initial, (state, response) => new State(state.Responses.Add(response)))
-                .StartWith(State.Initial);
+                .Scan(State.Initial, (state, response) => new State(state.Responses.Add(response)));
 
         static IObservable<LogRequest> LogSink(IObservable<State> stateStream, IObservable<HttpResponse> httpStream) =>
             httpStream
