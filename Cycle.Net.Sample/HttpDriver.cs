@@ -52,9 +52,8 @@ namespace Cycle.Net.Sample
             {
                 case HttpRequest httpRequest:
                     var client = new System.Net.Http.HttpClient();
-                    Observable.FromAsync(() => client.GetStringAsync(httpRequest.Url))
+                    Observable.FromAsync(() => client.GetStringAsync(httpRequest.Url), m_scheduler)
                         .Select(content => new HttpResponse(httpRequest, content))
-                        .ObserveOn(m_scheduler)
                         .Subscribe(this);
                     break;
             }
