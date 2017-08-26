@@ -50,6 +50,8 @@ class Program
     {
         var httpStream = source.GetDriver(HttpDriver.ID)
             .OfType<HttpResponse>();
+        var logStream = source.GetDriver(LogDriver.ID)
+            .OfType<LogResponse>();
 
         var stateStream = httpStream
             .Scan(State.Initial, (state, response) => new State(state.Responses.Add(response)))
@@ -62,8 +64,7 @@ class Program
                 (response, state) => new LogRequest($"nb of responses: {state.Responses.Count}, data received: {response}")
             );
 
-        var logAckSink = source.GetDriver(LogDriver.ID)
-            .OfType<LogResponse>()
+        var logAckSink = logStream
             .Select(response => EmptyRequest.Instance);
 
         var httpSink = new[]
