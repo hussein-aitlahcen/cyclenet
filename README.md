@@ -1,35 +1,22 @@
-﻿using System;
-using Cycle.Net.Run;
-using Cycle.Net.Run.Abstract;
-using System.Reactive.Linq;
-using System.Reactive.Concurrency;
+<h1 align="center">Cycle.Net</h1>
 
-namespace Cycle.Net.Sample
-{
-    class Program
-    {
-        static readonly IDriver[] Drivers = new[]
-        {
-            new HttpDriver(DefaultScheduler.Instance)
-        };
+<div align="center">
+  <strong>A functional and reactive framework for predictable code</strong>
+  <i>Heavily based on <a href="https://github.com/cyclejs/cyclejs">cycle.js</a></i>
+</div>
 
-        static void Main(string[] args)
-        {
-            new CycleNet<SimpleSource>(new SimpleSource(Drivers)).Run(Flow);
-            Console.Read();
-        }
+## Introduction
+This project aim to port the Cycle.js pattern to .Net
 
-        static readonly HttpResponse InitialResponse = new HttpResponse
-        {
-            Origin = new HttpRequest
-            {
-                Id = "init",
-                Url = "init"
-            },
-            Content = "init"
-        };
+## Contributions
+Feel free to fork and make PR, any help will be appreciated !
 
-        static IObservable<IRequest> Flow(SimpleSource source)
+## Sample
+
+A basic implementation of the HttpDriver is given in the [Sample](https://github.com/hussein-aitlahcen/cyclenet/tree/master/Cycle.Net.Sample) directory and here is the pure dataflow
+
+```csharp
+static IObservable<IRequest> Flow(SimpleSource source)
         {
             var httpSource = source.GetDriver(HttpDriver.ID)
                 .OfType<HttpResponse>()
@@ -65,5 +52,4 @@ namespace Cycle.Net.Sample
 
             return Observable.Merge<IRequest>(firstStep, secondStep, thirdStep, lastStep);
         }
-    }
-}
+```
