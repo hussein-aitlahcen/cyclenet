@@ -30,7 +30,7 @@ namespace Cycle.Net.Sample
         public static IObservable<IResponse> Create(IObservable<IRequest> requests) =>
             requests
                 .OfType<LogRequest>()
-                .Do(request => Console.WriteLine(request))
+                .Do(request => Console.WriteLine(request.Content))
                 .Select(request => new LogResponse(request));
     }
 }
