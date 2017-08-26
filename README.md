@@ -13,7 +13,7 @@ Feel free to fork and make PR, any help will be appreciated !
 
 ## Sample
 
-A basic implementation of the HttpDriver and LogDriver are given in the [Sample](https://github.com/hussein-aitlahcen/cyclenet/tree/master/Cycle.Net.Sample) directory and here is the pure dataflow (function **Flow**)
+A basic implementation of the HttpDriver and LogDriver are given in the [Sample](https://github.com/hussein-aitlahcen/cyclenet/tree/master/Cycle.Net.Sample) directory and here is an exemple of pure dataflow, fully functionnal and immutable (function **Flow**)
 
 ```csharp
      class Program
