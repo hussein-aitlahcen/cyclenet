@@ -29,13 +29,13 @@ namespace Cycle.Net.Run
             connectableSink.Connect();
         }
 
-        public void OnCompleted() { }
+        public void OnCompleted() =>
+            NotifyCompleted();
 
-        public void OnError(Exception error) { }
+        public void OnError(Exception error) =>
+            NotifyError(error);
 
-        public void OnNext(IRequest value)
-        {
-            Dispatch(value);
-        }
+        public void OnNext(IRequest value) =>
+            NotifyNext(value);
     }
 }

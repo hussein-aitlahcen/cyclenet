@@ -8,9 +8,10 @@ namespace Cycle.Net.Sample
 {
     class Program
     {
-        static readonly IDriver[] Drivers = new[]
+        static readonly IDriver[] Drivers = new IDriver[]
         {
-            new HttpDriver(DefaultScheduler.Instance)
+            new HttpDriver(DefaultScheduler.Instance),
+            new LogDriver()
         };
 
         static void Main(string[] args)
@@ -19,15 +20,12 @@ namespace Cycle.Net.Sample
             Console.Read();
         }
 
-        static readonly HttpResponse InitialResponse = new HttpResponse
-        {
-            Origin = new HttpRequest
-            {
-                Id = "init",
-                Url = "init"
-            },
-            Content = "init"
-        };
+        static readonly HttpResponse InitialResponse =
+            new HttpResponse
+            (
+                new HttpRequest("init", "init"),
+                "init"
+            );
 
         static IObservable<IRequest> Flow(SimpleSource source)
         {
@@ -35,35 +33,23 @@ namespace Cycle.Net.Sample
                 .OfType<HttpResponse>()
                 .StartWith(InitialResponse);
 
-            var firstStep = httpSource.Where(response => response == InitialResponse)
-                .Do(response => Console.WriteLine("fetching posts"))
-                .Select(response => new HttpRequest
-                {
-                    Id = "posts",
-                    Url = "https://jsonplaceholder.typicode.com/posts"
-                });
+            var logging = httpSource
+                .Zip
+                (
+                    httpSource.Scan(0, (counter, response) => counter + 1),
+                    (counter, response) => new LogRequest($"nb of response: {counter}, data received: {response}")
+                );
 
-            var secondStep = httpSource.Where(response => response.Origin.Id == "posts")
-                .Do(response => Console.WriteLine($"posts fetched, length={response.Content.Length}, fetching users"))
-                .Select(response => new HttpRequest
-                {
-                    Id = "users",
-                    Url = "https://jsonplaceholder.typicode.com/users"
-                });
+            var fetchPosts = httpSource.Where(response => response == InitialResponse)
+                .Select(response => new HttpRequest("posts", "https://jsonplaceholder.typicode.com/posts"));
 
-            var thirdStep = httpSource.Where(response => response.Origin.Id == "users")
-                .Do(response => Console.WriteLine($"users fetched, length={response.Content.Length}, fetching comments"))
-                .Select(response => new HttpRequest
-                {
-                    Id = "comments",
-                    Url = "https://jsonplaceholder.typicode.com/comments"
-                });
+            var fetchUsers = httpSource.Where(response => response.Origin.Id == "posts")
+                .Select(response => new HttpRequest("users", "https://jsonplaceholder.typicode.com/users"));
 
-            var lastStep = httpSource.Where(response => response.Origin.Id == "comments")
-                .Do(response => Console.WriteLine($"comments fetched, length={response.Content.Length}"))
-                .Select(response => EmptyRequest.Instance);
+            var fetchComments = httpSource.Where(response => response.Origin.Id == "users")
+                .Select(response => new HttpRequest("comments", "https://jsonplaceholder.typicode.com/comments"));
 
-            return Observable.Merge<IRequest>(firstStep, secondStep, thirdStep, lastStep);
+            return Observable.Merge<IRequest>(logging, fetchPosts, fetchUsers, fetchComments);
         }
     }
 }

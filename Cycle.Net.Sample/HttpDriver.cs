@@ -9,14 +9,30 @@ namespace Cycle.Net.Sample
 {
     public sealed class HttpRequest : IRequest
     {
-        public string Id { get; set; }
-        public string Url { get; set; }
+        public string Id { get; }
+        public string Url { get; }
+        public HttpRequest(string id, string url)
+        {
+            Id = id;
+            Url = url;
+        }
+
+        public override string ToString() =>
+            $"HttpRequest(id={Id}, url={Url})";
     }
 
     public sealed class HttpResponse : IResponse
     {
-        public HttpRequest Origin { get; set; }
-        public string Content { get; set; }
+        public HttpRequest Origin { get; }
+        public string Content { get; }
+        public HttpResponse(HttpRequest origin, string content)
+        {
+            Origin = origin;
+            Content = content;
+        }
+
+        public override string ToString() =>
+            $"HttpResponse(origin={Origin}, contentLength={Content.Length}";
     }
 
     public sealed class HttpDriver : AbstractDriver, IObserver<HttpResponse>
@@ -37,20 +53,14 @@ namespace Cycle.Net.Sample
                 case HttpRequest httpRequest:
                     var client = new System.Net.Http.HttpClient();
                     Observable.FromAsync(() => client.GetStringAsync(httpRequest.Url))
-                        .Select(content => new HttpResponse
-                        {
-                            Origin = httpRequest,
-                            Content = content
-                        })
+                        .Select(content => new HttpResponse(httpRequest, content))
                         .ObserveOn(m_scheduler)
                         .Subscribe(this);
                     break;
             }
         }
 
-        public void OnNext(HttpResponse value)
-        {
-            Dispatch(value);
-        }
+        public void OnNext(HttpResponse value) =>
+            NotifyNext(value);
     }
 }

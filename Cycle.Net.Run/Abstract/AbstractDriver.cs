@@ -13,10 +13,11 @@ namespace Cycle.Net.Run.Abstract
             Id = id;
         }
 
-        public virtual void OnNext(IRequest value) { }
+        public abstract void OnNext(IRequest value);
 
         public virtual void OnCompleted() { }
 
         public virtual void OnError(Exception error) { }
+
     }
 }
