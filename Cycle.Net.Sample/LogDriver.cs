@@ -17,12 +17,6 @@ namespace Cycle.Net.Sample
             $"LogRequest(contentLength={Content})";
     }
 
-    public sealed class LogResponse : IResponse
-    {
-        public LogRequest Origin { get; }
-        public LogResponse(LogRequest origin) => Origin = origin;
-    }
-
     public sealed class LogDriver
     {
         public const string ID = "log-driver";
@@ -31,6 +25,6 @@ namespace Cycle.Net.Sample
             requests
                 .OfType<LogRequest>()
                 .Do(request => Console.WriteLine(request.Content))
-                .Select(request => new LogResponse(request));
+                .Select(request => EmptyResponse.Instance);
     }
 }

@@ -17,11 +17,14 @@ namespace Cycle.Net.Run
         public void Run(Func<ISource, IObservable<IRequest>> main, Drivers drivers)
         {
             var source = new SimpleSource();
+            var ignore = Observable.Empty<IRequest>();
             foreach (var driver in drivers)
             {
-                source.AddDriver(driver.Key, driver.Value(this));
+                var stream = driver.Value(this);
+                ignore = ignore.Merge(stream.OfType<EmptyResponse>().SelectMany(response => Observable.Empty<IRequest>()));
+                source.AddDriver(driver.Key, stream);
             }
-            main(source).Subscribe(this);
+            main(source).Merge(ignore).Subscribe(this);
         }
 
         public void OnCompleted() =>
