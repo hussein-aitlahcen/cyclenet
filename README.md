@@ -16,7 +16,7 @@ Feel free to fork and make PR, any help will be appreciated !
 A basic implementation of the HttpDriver and LogDriver are given in the [Sample](https://github.com/hussein-aitlahcen/cyclenet/tree/master/Cycle.Net.Sample) directory and here is an exemple of pure dataflow, fully functionnal and immutable (function **Flow**)
 
 ```csharp
-     class Program
+    class Program
     {
         static readonly IDriver[] Drivers = new IDriver[]
         {
@@ -60,16 +60,14 @@ A basic implementation of the HttpDriver and LogDriver are given in the [Sample]
                     (response, state) => new LogRequest($"nb of response: {state.Responses.Count}, data received: {response}")
                 );
 
-            var fetchPosts = stateStream.Where(state => state.Responses.Count == 0)
-                .Select(state => RequestPosts);
+            var fetchStream = stateStream.Where(state => state.Responses.Count == 0)
+                .SelectMany(state => new IRequest[]{
+                    RequestPosts,
+                    RequestUsers,
+                    RequestComments
+                }.ToObservable());
 
-            var fetchUsers = stateStream.Where(state => state.Responses.Count == 1)
-                .Select(state => RequestUsers);
-
-            var fetchComments = stateStream.Where(state => state.Responses.Count == 2)
-                .Select(state => RequestComments);
-
-            return Observable.Merge<IRequest>(logStream, fetchPosts, fetchUsers, fetchComments);
+            return Observable.Merge<IRequest>(logStream, fetchStream);
         }
     }
 ```
