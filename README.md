@@ -50,19 +50,15 @@ class Program
         httpStream
             .Scan(State.Initial, (state, response) => new State(state.Responses.Add(response)));
 
-    static IObservable<LogRequest> LogSink(IObservable<State> stateStream, IObservable<HttpResponse> httpStream) =>
-        httpStream
-            .Zip
-            (
-                stateStream,
-                (response, state) => new LogRequest($"nb of responses: {state.Responses.Count}, data received: {response}")
-            );
+    static IObservable<LogRequest> LogSink(IObservable<State> stateStream) =>
+        stateStream
+            .Select(state => new LogRequest($"nb of responses: {state.Responses.Count}"));
 
     static IObservable<IRequest> Flow(ISource source)
     {
         var httpStream = source.GetDriver(HttpDriver.ID).OfType<HttpResponse>();
         var stateStream = StateStream(httpStream);
-        var logSink = LogSink(stateStream, httpStream);
+        var logSink = LogSink(stateStream);
         var httpSink = new[]
             {
                 RequestPosts,
