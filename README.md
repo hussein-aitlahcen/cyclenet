@@ -61,7 +61,7 @@ A basic implementation of the HttpDriver and LogDriver are given in the [Sample]
                 );
 
             var fetchStream = stateStream.Where(state => state.Responses.Count == 0)
-                .SelectMany(state => new IRequest[]{
+                .SelectMany(state => new []{
                     RequestPosts,
                     RequestUsers,
                     RequestComments
