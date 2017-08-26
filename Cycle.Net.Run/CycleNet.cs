@@ -12,18 +12,9 @@ namespace Cycle.Net.Run
     {
         private TSource m_source;
 
-        private List<IObserver<IRequest>> m_observers;
-
-        private Queue<IRequest> m_buffer;
-
-        private bool m_start;
-
         public CycleNet(TSource source)
         {
             m_source = source;
-            m_start = true;
-            m_buffer = new Queue<IRequest>();
-            m_observers = new List<IObserver<IRequest>>();
         }
 
         public void Run(Func<TSource, IObservable<IRequest>> main)
@@ -32,12 +23,10 @@ namespace Cycle.Net.Run
             {
                 Subscribe(driver);
             }
-            main(m_source).Subscribe(this);
-            m_start = false;
-            while (m_buffer.Count > 0)
-            {
-                OnNext(m_buffer.Dequeue());
-            }
+            var sink = main(m_source);
+            var connectableSink = sink.Publish();
+            connectableSink.Subscribe(this);
+            connectableSink.Connect();
         }
 
         public void OnCompleted() { }
@@ -46,14 +35,7 @@ namespace Cycle.Net.Run
 
         public void OnNext(IRequest value)
         {
-            if (m_start)
-            {
-                m_buffer.Enqueue(value);
-            }
-            else
-            {
-                Dispatch(value);
-            }
+            Dispatch(value);
         }
     }
 }
