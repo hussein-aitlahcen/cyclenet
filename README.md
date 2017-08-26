@@ -46,6 +46,22 @@ class Program
         }
     }
 
+    static IObservable<State> StateStream(IObservable<HttpResponse> httpStream) =>
+        httpStream
+            .Scan(State.Initial, (state, response) => new State(state.Responses.Add(response)))
+            .StartWith(State.Initial);
+
+    static IObservable<LogRequest> LogSink(IObservable<State> stateStream, IObservable<HttpResponse> httpStream) =>
+        httpStream
+            .Zip
+            (
+                stateStream,
+                (response, state) => new LogRequest($"nb of responses: {state.Responses.Count}, data received: {response}")
+            );
+
+    static IObservable<IRequest> Ignore(IObservable<IResponse> stream) =>
+        stream.Select(response => EmptyRequest.Instance);
+
     static IObservable<IRequest> Flow(ISource source)
     {
         var httpStream = source.GetDriver(HttpDriver.ID)
@@ -53,19 +69,11 @@ class Program
         var logStream = source.GetDriver(LogDriver.ID)
             .OfType<LogResponse>();
 
-        var stateStream = httpStream
-            .Scan(State.Initial, (state, response) => new State(state.Responses.Add(response)))
-            .StartWith(State.Initial);
+        var stateStream = StateStream(httpStream);
 
-        var logSink = httpStream
-            .Zip
-            (
-                stateStream,
-                (response, state) => new LogRequest($"nb of responses: {state.Responses.Count}, data received: {response}")
-            );
+        var logSink = LogSink(stateStream, httpStream);
 
-        var logAckSink = logStream
-            .Select(response => EmptyRequest.Instance);
+        var logAckSink = Ignore(logStream);
 
         var httpSink = new[]
             {
