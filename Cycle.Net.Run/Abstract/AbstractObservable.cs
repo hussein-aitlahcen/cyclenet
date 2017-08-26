@@ -25,7 +25,7 @@ namespace Cycle.Net.Run.Abstract
         public void Notify(Action<IObserver<T>> fun) =>
             m_observers.ForEach(fun);
 
-        public IDisposable Subscribe(IObserver<T> observer)
+        public virtual IDisposable Subscribe(IObserver<T> observer)
         {
             m_observers.Add(observer);
             return Disposable.Create(() => m_observers.Remove(observer));

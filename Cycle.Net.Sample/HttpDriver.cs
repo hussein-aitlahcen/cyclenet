@@ -35,7 +35,7 @@ namespace Cycle.Net.Sample
             $"HttpResponse(origin={Origin}, contentLength={Content.Length}";
     }
 
-    public sealed class HttpDriver : AbstractDriver, IObserver<HttpResponse>
+    public sealed class HttpDriver : AbstractDriver
     {
         public static string ID => "http-driver";
 
@@ -52,14 +52,18 @@ namespace Cycle.Net.Sample
             {
                 case HttpRequest httpRequest:
                     var client = new System.Net.Http.HttpClient();
-                    Observable.FromAsync(() => client.GetStringAsync(httpRequest.Url), m_scheduler)
+                    Observable.FromAsync(() => client.GetStringAsync(httpRequest.Url))
                         .Select(content => new HttpResponse(httpRequest, content))
-                        .Subscribe(this);
+                        .ObserveOn(m_scheduler)
+                        .Subscribe(response =>
+                        {
+                            NotifyNext(response);
+                        }, error =>
+                        {
+                            NotifyError(error);
+                        });
                     break;
             }
         }
-
-        public void OnNext(HttpResponse value) =>
-            NotifyNext(value);
     }
 }

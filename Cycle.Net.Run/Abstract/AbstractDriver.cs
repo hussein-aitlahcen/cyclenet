@@ -18,6 +18,5 @@ namespace Cycle.Net.Run.Abstract
         public virtual void OnCompleted() { }
 
         public virtual void OnError(Exception error) { }
-
     }
 }
