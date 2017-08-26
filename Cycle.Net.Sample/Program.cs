@@ -53,12 +53,15 @@ namespace Cycle.Net.Sample
         static IObservable<IRequest> Flow(ISource source)
         {
             var httpStream = source.GetDriver(HttpDriver.ID).OfType<HttpResponse>();
-            return Observable.Merge<IRequest>(new[]
+            var stateStream = StateStream(httpStream);
+            var logSink = LogSink(stateStream, httpStream);
+            var httpSink = new[]
                 {
                     RequestPosts,
                     RequestUsers,
                     RequestComments
-                }.ToObservable(), LogSink(StateStream(httpStream), httpStream));
+                }.ToObservable();
+            return Observable.Merge<IRequest>(httpSink, logSink);
         }
     }
 }
