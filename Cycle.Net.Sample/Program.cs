@@ -4,20 +4,23 @@ using Cycle.Net.Run.Abstract;
 using System.Reactive.Linq;
 using System.Reactive.Concurrency;
 using System.Collections.Immutable;
+using System.Collections.Generic;
 
 namespace Cycle.Net.Sample
 {
+    using Driver = IObservable<IResponse>;
+    using DriverMaker = Func<IObservable<IRequest>, IObservable<IResponse>>;
+    using Drivers = Dictionary<string, Func<IObservable<IRequest>, IObservable<IResponse>>>;
+
     class Program
     {
-        static readonly IDriver[] Drivers = new IDriver[]
-        {
-            new HttpDriver(DefaultScheduler.Instance),
-            new LogDriver()
-        };
-
         static void Main(string[] args)
         {
-            new CycleNet<SimpleSource>(new SimpleSource(Drivers)).Run(Flow);
+            new CycleNet().Run(Flow, new Drivers()
+            {
+                [LogDriver.ID] = LogDriver.Create,
+                [HttpDriver.ID] = HttpDriver.Create(new EventLoopScheduler())
+            });
             Console.Read();
         }
 
@@ -35,30 +38,34 @@ namespace Cycle.Net.Sample
             }
         }
 
-        static IObservable<IRequest> Flow(SimpleSource source)
+        static IObservable<IRequest> Flow(ISource source)
         {
-            var httpSource = source.GetDriver(HttpDriver.ID)
+            var httpStream = source.GetDriver(HttpDriver.ID)
                 .OfType<HttpResponse>();
 
-            var stateStream = httpSource
+            var stateStream = httpStream
                 .Scan(State.Initial, (state, response) => new State(state.Responses.Add(response)))
                 .StartWith(State.Initial);
 
-            var logStream = httpSource
+            var logSink = httpStream
                 .Zip
                 (
                     stateStream,
-                    (response, state) => new LogRequest($"nb of response: {state.Responses.Count}, data received: {response}")
+                    (response, state) => new LogRequest($"nb of responses: {state.Responses.Count}, data received: {response}")
                 );
 
-            var fetchStream = stateStream.Where(state => state.Responses.Count == 0)
-                .SelectMany(state => new[]{
+            var logAckSink = source.GetDriver(LogDriver.ID)
+                .OfType<LogResponse>()
+                .Select(response => EmptyRequest.Instance);
+
+            var httpSink = new[]
+                {
                     RequestPosts,
                     RequestUsers,
                     RequestComments
-                }.ToObservable());
+                }.ToObservable();
 
-            return Observable.Merge<IRequest>(logStream, fetchStream);
+            return Observable.Merge<IRequest>(httpSink, logSink, logAckSink);
         }
     }
 }

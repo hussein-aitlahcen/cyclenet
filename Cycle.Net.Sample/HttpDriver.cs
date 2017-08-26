@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Net.Http;
 using System.Reactive.Concurrency;
 using System.Reactive.Disposables;
 using System.Reactive.Linq;
@@ -35,35 +36,21 @@ namespace Cycle.Net.Sample
             $"HttpResponse(origin={Origin}, contentLength={Content.Length}";
     }
 
-    public sealed class HttpDriver : AbstractDriver
+    public static class HttpDriver
     {
-        public static string ID => "http-driver";
+        public const string ID = "http-driver";
 
-        private readonly IScheduler m_scheduler;
-
-        public HttpDriver(IScheduler sheduler) : base(ID)
-        {
-            m_scheduler = sheduler;
-        }
-
-        public override void OnNext(IRequest value)
-        {
-            switch (value)
-            {
-                case HttpRequest httpRequest:
-                    var client = new System.Net.Http.HttpClient();
-                    Observable.FromAsync(() => client.GetStringAsync(httpRequest.Url))
-                        .Select(content => new HttpResponse(httpRequest, content))
-                        .ObserveOn(m_scheduler)
-                        .Subscribe(response =>
+        public static Func<IObservable<IRequest>, IObservable<IResponse>> Create(IScheduler scheduler) =>
+            requests => requests
+                .OfType<HttpRequest>()
+                .SelectMany(request =>
+                {
+                    var client = new HttpClient();
+                    return Observable.FromAsync(() => client.GetStringAsync(request.Url))
+                        .Select(content =>
                         {
-                            NotifyNext(response);
-                        }, error =>
-                        {
-                            NotifyError(error);
+                            return new HttpResponse(request, content);
                         });
-                    break;
-            }
-        }
+                });
     }
 }

@@ -4,29 +4,24 @@ using System.Reactive.Linq;
 using System.Reactive.Disposables;
 using System.Collections.Generic;
 using Cycle.Net.Run.Abstract;
+using System.Reactive.Subjects;
 
 namespace Cycle.Net.Run
 {
-    public class CycleNet<TSource> : AbstractObservable<IRequest>, IObserver<IRequest>
-        where TSource : ISource
+    using Driver = IObservable<IResponse>;
+    using DriverMaker = Func<IObservable<IRequest>, IObservable<IResponse>>;
+    using Drivers = Dictionary<string, Func<IObservable<IRequest>, IObservable<IResponse>>>;
+
+    public class CycleNet : AbstractObservable<IRequest>, IObserver<IRequest>
     {
-        private TSource m_source;
-
-        public CycleNet(TSource source)
+        public void Run(Func<ISource, IObservable<IRequest>> main, Drivers drivers)
         {
-            m_source = source;
-        }
-
-        public void Run(Func<TSource, IObservable<IRequest>> main)
-        {
-            foreach (var driver in m_source.GetDrivers())
+            var source = new SimpleSource();
+            foreach (var driver in drivers)
             {
-                Subscribe(driver);
+                source.AddDriver(driver.Key, driver.Value(this));
             }
-            var sink = main(m_source);
-            var connectableSink = sink.Publish();
-            connectableSink.Subscribe(this);
-            connectableSink.Connect();
+            main(source).Subscribe(this);
         }
 
         public void OnCompleted() =>

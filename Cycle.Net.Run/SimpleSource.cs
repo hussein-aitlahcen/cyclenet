@@ -1,25 +1,28 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using Cycle.Net.Run.Abstract;
 
 namespace Cycle.Net.Run
 {
+    using Driver = IObservable<IResponse>;
+
     public class SimpleSource : ISource
     {
-        private List<IDriver> m_drivers;
+        private readonly Dictionary<string, Driver> m_drivers;
 
-        public SimpleSource() : this(Enumerable.Empty<IDriver>()) { }
+        public SimpleSource() : this(new Dictionary<string, Driver>()) { }
 
-        public SimpleSource(IEnumerable<IDriver> drivers) =>
-            m_drivers = new List<IDriver>(drivers);
+        public SimpleSource(Dictionary<string, Driver> drivers) =>
+            m_drivers = drivers;
 
-        public void AddDriver(IDriver driver) =>
-            m_drivers.Add(driver);
+        public void AddDriver(string id, Driver driver) =>
+            m_drivers[id] = driver;
 
-        public IDriver GetDriver(string id) =>
-            m_drivers.First(driver => driver.Id == id);
+        public Driver GetDriver(string id) =>
+            m_drivers[id];
 
-        public IEnumerable<IDriver> GetDrivers() =>
-            m_drivers;
+        public IEnumerable<Driver> GetDrivers() =>
+            m_drivers.Values;
     }
 }

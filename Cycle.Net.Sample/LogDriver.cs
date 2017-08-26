@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Reactive.Concurrency;
 using System.Reactive.Disposables;
 using System.Reactive.Linq;
+using Cycle.Net.Run;
 using Cycle.Net.Run.Abstract;
 
 namespace Cycle.Net.Sample
@@ -16,22 +17,20 @@ namespace Cycle.Net.Sample
             $"LogRequest(contentLength={Content})";
     }
 
-    public sealed class LogDriver : AbstractDriver
+    public sealed class LogResponse : IResponse
     {
-        public static string ID => "log-driver";
+        public LogRequest Origin { get; }
+        public LogResponse(LogRequest origin) => Origin = origin;
+    }
 
-        public LogDriver() : base(ID)
-        {
-        }
+    public sealed class LogDriver
+    {
+        public const string ID = "log-driver";
 
-        public override void OnNext(IRequest value)
-        {
-            switch (value)
-            {
-                case LogRequest logRequest:
-                    Console.WriteLine(logRequest.Content);
-                    break;
-            }
-        }
+        public static IObservable<IResponse> Create(IObservable<IRequest> requests) =>
+            requests
+                .OfType<LogRequest>()
+                .Do(request => Console.WriteLine(request))
+                .Select(request => new LogResponse(request));
     }
 }
