@@ -58,21 +58,14 @@ class Program
                 (response, state) => new LogRequest($"nb of responses: {state.Responses.Count}, data received: {response}")
             );
 
-    static IObservable<IRequest> Ignore(IObservable<IResponse> stream) =>
-        stream.Select(response => EmptyRequest.Instance);
-
     static IObservable<IRequest> Flow(ISource source)
     {
         var httpStream = source.GetDriver(HttpDriver.ID)
             .OfType<HttpResponse>();
-        var logStream = source.GetDriver(LogDriver.ID)
-            .OfType<LogResponse>();
 
         var stateStream = StateStream(httpStream);
 
         var logSink = LogSink(stateStream, httpStream);
-
-        var logAckSink = Ignore(logStream);
 
         var httpSink = new[]
             {
@@ -81,7 +74,7 @@ class Program
                 RequestComments
             }.ToObservable();
 
-        return Observable.Merge<IRequest>(httpSink, logSink, logAckSink);
+        return Observable.Merge<IRequest>(httpSink, logSink);
     }
 }
 ```
