@@ -5,6 +5,7 @@ using System.Reactive.Disposables;
 using System.Collections.Generic;
 using Cycle.Net.Run.Abstract;
 using System.Reactive.Subjects;
+using System.Reactive.Concurrency;
 
 namespace Cycle.Net.Run
 {
@@ -14,7 +15,7 @@ namespace Cycle.Net.Run
 
     public class CycleNet : AbstractObservable<IRequest>, IObserver<IRequest>
     {
-        public void Run(Func<ISource, IObservable<IRequest>> main, Drivers drivers)
+        public void Run(Func<ISource, IObservable<IRequest>> main, IScheduler scheduler, Drivers drivers)
         {
             var source = new SimpleSource();
             var ignore = Observable.Empty<IRequest>();
@@ -22,7 +23,7 @@ namespace Cycle.Net.Run
             {
                 var stream = driver.Value(this);
                 ignore = ignore.Merge(stream.OfType<EmptyResponse>().SelectMany(response => Observable.Empty<IRequest>()));
-                source.AddDriver(driver.Key, stream);
+                source.AddDriver(driver.Key, stream.ObserveOn(scheduler));
             }
             main(source).Merge(ignore).Subscribe(this);
         }

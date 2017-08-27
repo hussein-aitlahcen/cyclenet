@@ -25,7 +25,7 @@ class Program
     static void Main(string[] args)
     {
         var scheduler = new EventLoopScheduler();
-        new CycleNet().Run(Flow, new Drivers()
+        new CycleNet().Run(Flow, scheduler, new Drivers()
         {
             [LogDriver.ID] = LogDriver.Create,
             [ApiDriver.ID] = ApiDriver.Create(scheduler),
@@ -89,10 +89,15 @@ class Program
             tcpStateStream.StartWith(TcpState.Initial),
             (apiState, tcpState) => new AppState(apiState, tcpState));
 
-    static IObservable<LogRequest> LogSink(IObservable<AppState> appStateStream) =>
+    static IObservable<LogRequest> LogStateSink(IObservable<AppState> appStateStream) =>
         appStateStream
             .Select(state => new LogRequest(
                 $"nb of responses: {state.Api.Responses.Count}, nb of clients: {state.Tcp.Clients.Count}"));
+
+    static IObservable<LogRequest> LogTcpSink(IObservable<IDotNettyResponse> tcpStream) =>
+        tcpStream
+            .OfType<ClientDataReceived>()
+            .Select(data => new LogRequest($"client data recv: {data.Buffer.ToString()}"));
 
     static IObservable<IRequest> Flow(ISource source)
     {
@@ -101,7 +106,7 @@ class Program
         var apiStateStream = ApiStateStream(apiStream);
         var tcpStateStream = TcpStateStream(tcpStream);
         var appStateStream = AppStateStream(apiStateStream, tcpStateStream);
-        var logSink = LogSink(appStateStream);
+        var logSink = Observable.Merge(LogStateSink(appStateStream), LogTcpSink(tcpStream));
         var httpSink = new[]
             {
                 RequestPosts,
@@ -118,6 +123,7 @@ nb of responses: 2, nb of clients: 0
 nb of responses: 3, nb of clients: 0
 nb of responses: 3, nb of clients: 1
 nb of responses: 3, nb of clients: 2
+client data recv: SimpleLeakAwareByteBuffer(PooledHeapByteBuffer(ridx: 0, widx: 416, cap: 1024))
 nb of responses: 3, nb of clients: 3
 nb of responses: 3, nb of clients: 2
 nb of responses: 3, nb of clients: 1

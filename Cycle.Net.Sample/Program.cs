@@ -19,7 +19,7 @@ namespace Cycle.Net.Sample
         static void Main(string[] args)
         {
             var scheduler = new EventLoopScheduler();
-            new CycleNet().Run(Flow, new Drivers()
+            new CycleNet().Run(Flow, scheduler, new Drivers()
             {
                 [LogDriver.ID] = LogDriver.Create,
                 [ApiDriver.ID] = ApiDriver.Create(scheduler),
@@ -83,10 +83,15 @@ namespace Cycle.Net.Sample
                 tcpStateStream.StartWith(TcpState.Initial),
                 (apiState, tcpState) => new AppState(apiState, tcpState));
 
-        static IObservable<LogRequest> LogSink(IObservable<AppState> appStateStream) =>
+        static IObservable<LogRequest> LogStateSink(IObservable<AppState> appStateStream) =>
             appStateStream
                 .Select(state => new LogRequest(
                     $"nb of responses: {state.Api.Responses.Count}, nb of clients: {state.Tcp.Clients.Count}"));
+
+        static IObservable<LogRequest> LogTcpSink(IObservable<IDotNettyResponse> tcpStream) =>
+            tcpStream
+                .OfType<ClientDataReceived>()
+                .Select(data => new LogRequest($"client data recv: {data.Buffer.ToString()}"));
 
         static IObservable<IRequest> Flow(ISource source)
         {
@@ -95,7 +100,7 @@ namespace Cycle.Net.Sample
             var apiStateStream = ApiStateStream(apiStream);
             var tcpStateStream = TcpStateStream(tcpStream);
             var appStateStream = AppStateStream(apiStateStream, tcpStateStream);
-            var logSink = LogSink(appStateStream);
+            var logSink = Observable.Merge(LogStateSink(appStateStream), LogTcpSink(tcpStream));
             var httpSink = new[]
                 {
                     RequestPosts,
