@@ -86,8 +86,8 @@ class Program
 
     static IObservable<AppState> AppStateStream(IObservable<ApiState> apiStateStream, IObservable<TcpState> tcpStateStream) =>
         Observable.CombineLatest(
-            apiStateStream.StartWith(ApiState.Initial),
-            tcpStateStream.StartWith(TcpState.Initial),
+            apiStateStream,
+            tcpStateStream,
             (apiState, tcpState) => new AppState(apiState, tcpState));
 
     static IObservable<LogRequest> LogStateSink(IObservable<AppState> appStateStream) =>
@@ -111,7 +111,9 @@ class Program
         var tcpStream = source.GetDriver(DotNettyDriver.ID).OfType<IDotNettyResponse>();
         var apiStateStream = ApiStateStream(apiStream);
         var tcpStateStream = TcpStateStream(tcpStream);
-        var appStateStream = AppStateStream(apiStateStream, tcpStateStream);
+        var appStateStream = AppStateStream(
+            apiStateStream.StartWith(ApiState.Initial),
+            tcpStateStream.StartWith(TcpState.Initial));
         var logSink = Observable.Merge(LogStateSink(appStateStream), LogTcpSink(tcpStream));
         var tcpSink = EchoTcpSink(tcpStream);
         var httpSink = new[]
