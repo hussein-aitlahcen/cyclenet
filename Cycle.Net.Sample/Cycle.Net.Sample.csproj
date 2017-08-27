@@ -3,6 +3,7 @@
     <ProjectReference Include="..\Cycle.Net.Run\Cycle.Net.Run.csproj" />
   </ItemGroup>
   <ItemGroup>
+    <PackageReference Include="DotNetty.Handlers" Version="0.4.6" />
     <PackageReference Include="System.Reactive" Version="3.1.1" />
   </ItemGroup>
   <PropertyGroup>

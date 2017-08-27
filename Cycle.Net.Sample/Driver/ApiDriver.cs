@@ -6,48 +6,48 @@ using System.Reactive.Disposables;
 using System.Reactive.Linq;
 using Cycle.Net.Run.Abstract;
 
-namespace Cycle.Net.Sample
+namespace Cycle.Net.Sample.Driver
 {
-    public sealed class HttpRequest : IRequest
+    public sealed class ApiRequest : IRequest
     {
         public string Id { get; }
         public string Url { get; }
-        public HttpRequest(string id, string url)
+        public ApiRequest(string id, string url)
         {
             Id = id;
             Url = url;
         }
 
         public override string ToString() =>
-            $"HttpRequest(id={Id}, url={Url})";
+            $"ApiRequest(id={Id}, url={Url})";
     }
 
-    public sealed class HttpResponse : IResponse
+    public sealed class ApiResponse : IResponse
     {
-        public HttpRequest Origin { get; }
+        public ApiRequest Origin { get; }
         public string Content { get; }
-        public HttpResponse(HttpRequest origin, string content)
+        public ApiResponse(ApiRequest origin, string content)
         {
             Origin = origin;
             Content = content;
         }
 
         public override string ToString() =>
-            $"HttpResponse(origin={Origin}, contentLength={Content.Length}";
+            $"ApiResponse(origin={Origin}, contentLength={Content.Length}";
     }
 
-    public static class HttpDriver
+    public static class ApiDriver
     {
-        public const string ID = "http-driver";
+        public const string ID = "api-driver";
 
         public static Func<IObservable<IRequest>, IObservable<IResponse>> Create(IScheduler scheduler) =>
             requests => requests
-                .OfType<HttpRequest>()
+                .OfType<ApiRequest>()
                 .SelectMany
                 (
                     request => Observable
-                        .FromAsync(() => new HttpClient().GetStringAsync(request.Url))
-                        .Select(content => new HttpResponse(request, content))
+                        .FromAsync(() => new HttpClient().GetStringAsync(request.Url), scheduler)
+                        .Select(content => new ApiResponse(request, content))
                 );
     }
 }

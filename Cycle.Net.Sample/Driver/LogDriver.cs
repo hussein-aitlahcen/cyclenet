@@ -6,7 +6,7 @@ using System.Reactive.Linq;
 using Cycle.Net.Run;
 using Cycle.Net.Run.Abstract;
 
-namespace Cycle.Net.Sample
+namespace Cycle.Net.Sample.Driver
 {
     public sealed class LogRequest : IRequest
     {
