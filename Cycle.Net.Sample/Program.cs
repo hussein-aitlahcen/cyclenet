@@ -41,9 +41,9 @@ namespace Cycle.Net.Sample
 
         class TcpState
         {
-            public static TcpState Initial = new TcpState(ImmutableHashSet.Create<IChannel>());
-            public ImmutableHashSet<IChannel> Clients { get; }
-            public TcpState(ImmutableHashSet<IChannel> clients) => Clients = clients;
+            public static TcpState Initial = new TcpState(ImmutableHashSet.Create<IChannelId>());
+            public ImmutableHashSet<IChannelId> Clients { get; }
+            public TcpState(ImmutableHashSet<IChannelId> clients) => Clients = clients;
         }
 
         class AppState
@@ -70,9 +70,9 @@ namespace Cycle.Net.Sample
                     switch (response)
                     {
                         case ClientConnected connected:
-                            return new TcpState(state.Clients.Add(connected.Client));
+                            return new TcpState(state.Clients.Add(connected.ClientId));
                         case ClientDisconnected disconnected:
-                            return new TcpState(state.Clients.Remove(disconnected.Client));
+                            return new TcpState(state.Clients.Remove(disconnected.ClientId));
                     }
                     return state;
                 });
@@ -93,6 +93,11 @@ namespace Cycle.Net.Sample
                 .OfType<ClientDataReceived>()
                 .Select(data => new LogRequest($"client data recv: {data.Buffer.ToString()}"));
 
+        static IObservable<IDotNettyRequest> EchoTcpSink(IObservable<IDotNettyResponse> tcpStream) =>
+            tcpStream
+                .OfType<ClientDataReceived>()
+                .Select(data => new ClientDataSend(data.ClientId, data.Buffer));
+
         static IObservable<IRequest> Flow(ISource source)
         {
             var apiStream = source.GetDriver(ApiDriver.ID).OfType<ApiResponse>();
@@ -101,13 +106,14 @@ namespace Cycle.Net.Sample
             var tcpStateStream = TcpStateStream(tcpStream);
             var appStateStream = AppStateStream(apiStateStream, tcpStateStream);
             var logSink = Observable.Merge(LogStateSink(appStateStream), LogTcpSink(tcpStream));
+            var tcpSink = EchoTcpSink(tcpStream);
             var httpSink = new[]
                 {
                     RequestPosts,
                     RequestUsers,
                     RequestComments
                 }.ToObservable();
-            return Observable.Merge<IRequest>(httpSink, logSink);
+            return Observable.Merge<IRequest>(httpSink, tcpSink, logSink);
         }
     }
 }

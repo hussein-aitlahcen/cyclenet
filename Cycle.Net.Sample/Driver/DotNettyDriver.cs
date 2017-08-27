@@ -11,59 +11,60 @@ using DotNetty.Buffers;
 using DotNetty.Codecs;
 using DotNetty.Transport.Bootstrapping;
 using DotNetty.Transport.Channels;
+using DotNetty.Transport.Channels.Groups;
 using DotNetty.Transport.Channels.Sockets;
 
 namespace Cycle.Net.Sample.Driver
 {
-    public interface IDotNettyResponse
+    public interface IDotNettyResponse : IResponse
     {
-        IChannel Client { get; }
+        IChannelId ClientId { get; }
     }
 
-    public interface IDotNettyRequest
+    public interface IDotNettyRequest : IRequest
     {
-        IChannel Client { get; }
+        IChannelId ClientId { get; }
     }
 
-    public sealed class ClientConnected : IResponse, IDotNettyResponse
+    public sealed class ClientConnected : IDotNettyResponse
     {
-        public IChannel Client { get; }
-        public ClientConnected(IChannel client) => Client = client;
+        public IChannelId ClientId { get; }
+        public ClientConnected(IChannelId clientId) => ClientId = clientId;
     }
 
-    public sealed class ClientDisconnected : IResponse, IDotNettyResponse
+    public sealed class ClientDisconnected : IDotNettyResponse
     {
-        public IChannel Client { get; }
-        public ClientDisconnected(IChannel client) => Client = client;
+        public IChannelId ClientId { get; }
+        public ClientDisconnected(IChannelId clientId) => ClientId = clientId;
     }
 
-    public sealed class ClientDataReceived : IResponse, IDotNettyResponse
+    public sealed class ClientDataReceived : IDotNettyResponse
     {
-        public IChannel Client { get; }
+        public IChannelId ClientId { get; }
         public IByteBuffer Buffer { get; }
-        public ClientDataReceived(IChannel client, IByteBuffer buffer)
+        public ClientDataReceived(IChannelId clientId, IByteBuffer buffer)
         {
-            Client = client;
+            ClientId = clientId;
             Buffer = buffer;
         }
     }
 
-    public sealed class ClientDataSend : IRequest, IDotNettyRequest
+    public sealed class ClientDataSend : IDotNettyRequest
     {
 
-        public IChannel Client { get; }
+        public IChannelId ClientId { get; }
         public IByteBuffer Buffer { get; }
-        public ClientDataSend(IChannel client, IByteBuffer buffer)
+        public ClientDataSend(IChannelId clientId, IByteBuffer buffer)
         {
-            Client = client;
+            ClientId = clientId;
             Buffer = buffer;
         }
     }
 
-    public sealed class ClientDisconnect : IRequest, IDotNettyRequest
+    public sealed class ClientDisconnect : IDotNettyRequest
     {
-        public IChannel Client { get; }
-        public ClientDisconnect(IChannel client) => Client = client;
+        public IChannelId ClientId { get; }
+        public ClientDisconnect(IChannelId clientId) => ClientId = clientId;
     }
 
     public sealed class DotNettyDriver
@@ -107,21 +108,37 @@ namespace Cycle.Net.Sample.Driver
         {
             private readonly List<IObserver<IResponse>> m_observers;
 
+            private volatile IChannelGroup m_group;
+
             public SocketHandler() =>
                 m_observers = new List<IObserver<IResponse>>();
 
-            public override void ChannelActive(IChannelHandlerContext context) =>
-                Notify(new ClientConnected(context.Channel));
+            public override void ChannelActive(IChannelHandlerContext context)
+            {
+                IChannelGroup g = m_group;
+                if (g == null)
+                {
+                    lock (this)
+                    {
+                        if (m_group == null)
+                        {
+                            g = m_group = new DefaultChannelGroup(context.Executor);
+                        }
+                    }
+                }
+                m_group.Add(context.Channel);
+                Notify(new ClientConnected(context.Channel.Id));
+            }
 
             public override void ChannelInactive(IChannelHandlerContext context) =>
-                Notify(new ClientDisconnected(context.Channel));
+                Notify(new ClientDisconnected(context.Channel.Id));
 
             public override void ChannelRead(IChannelHandlerContext context, object message)
             {
                 var buffer = message as IByteBuffer;
                 if (buffer != null)
                 {
-                    Notify(new ClientDataReceived(context.Channel, buffer));
+                    Notify(new ClientDataReceived(context.Channel.Id, buffer.Copy()));
                 }
             }
 
@@ -153,11 +170,26 @@ namespace Cycle.Net.Sample.Driver
             {
                 switch (value)
                 {
-                    // TODO: handler write request
+                    case ClientDataSend send:
+                        m_group.WriteAndFlushAsync(
+                            send.Buffer,
+                            new ChannelMatcher(channel => channel.Id == send.ClientId));
+                        break;
                 }
             }
 
             public override bool IsSharable => true;
+        }
+        private class ChannelMatcher : IChannelMatcher
+        {
+            private readonly Predicate<IChannel> m_predicate;
+
+            public ChannelMatcher(Predicate<IChannel> predicate)
+            {
+                m_predicate = predicate;
+            }
+
+            public bool Matches(IChannel channel) => m_predicate(channel);
         }
     }
 }

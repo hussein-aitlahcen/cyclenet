@@ -15,6 +15,7 @@ Feel free to fork and make PR, any help will be appreciated !
 
 A basic implementation of the ApiDriver, DotNettyDriver and LogDriver are given in the [Sample](https://github.com/hussein-aitlahcen/cyclenet/tree/master/Cycle.Net.Sample) directory and here is an exemple of pure dataflow, fully functionnal, immutable and side-effects free (function **Flow**)
 
+This example retrieve data from three apis and accept tcp connections on port 5000 Echoing back any data received.
 ```csharp
 using Driver = IObservable<IResponse>;
 using DriverMaker = Func<IObservable<IRequest>, IObservable<IResponse>>;
@@ -47,9 +48,9 @@ class Program
 
     class TcpState
     {
-        public static TcpState Initial = new TcpState(ImmutableHashSet.Create<IChannel>());
-        public ImmutableHashSet<IChannel> Clients { get; }
-        public TcpState(ImmutableHashSet<IChannel> clients) => Clients = clients;
+        public static TcpState Initial = new TcpState(ImmutableHashSet.Create<IChannelId>());
+        public ImmutableHashSet<IChannelId> Clients { get; }
+        public TcpState(ImmutableHashSet<IChannelId> clients) => Clients = clients;
     }
 
     class AppState
@@ -76,9 +77,9 @@ class Program
                 switch (response)
                 {
                     case ClientConnected connected:
-                        return new TcpState(state.Clients.Add(connected.Client));
+                        return new TcpState(state.Clients.Add(connected.ClientId));
                     case ClientDisconnected disconnected:
-                        return new TcpState(state.Clients.Remove(disconnected.Client));
+                        return new TcpState(state.Clients.Remove(disconnected.ClientId));
                 }
                 return state;
             });
@@ -99,6 +100,11 @@ class Program
             .OfType<ClientDataReceived>()
             .Select(data => new LogRequest($"client data recv: {data.Buffer.ToString()}"));
 
+    static IObservable<IDotNettyRequest> EchoTcpSink(IObservable<IDotNettyResponse> tcpStream) =>
+        tcpStream
+            .OfType<ClientDataReceived>()
+            .Select(data => new ClientDataSend(data.ClientId, data.Buffer));
+
     static IObservable<IRequest> Flow(ISource source)
     {
         var apiStream = source.GetDriver(ApiDriver.ID).OfType<ApiResponse>();
@@ -107,26 +113,14 @@ class Program
         var tcpStateStream = TcpStateStream(tcpStream);
         var appStateStream = AppStateStream(apiStateStream, tcpStateStream);
         var logSink = Observable.Merge(LogStateSink(appStateStream), LogTcpSink(tcpStream));
+        var tcpSink = EchoTcpSink(tcpStream);
         var httpSink = new[]
             {
                 RequestPosts,
                 RequestUsers,
                 RequestComments
             }.ToObservable();
-        return Observable.Merge<IRequest>(httpSink, logSink);
+        return Observable.Merge<IRequest>(httpSink, tcpSink, logSink);
     }
 }
-
-/* Console output when connecting a browser to http://localhost:5000
-nb of responses: 1, nb of clients: 0
-nb of responses: 2, nb of clients: 0
-nb of responses: 3, nb of clients: 0
-nb of responses: 3, nb of clients: 1
-nb of responses: 3, nb of clients: 2
-client data recv: SimpleLeakAwareByteBuffer(PooledHeapByteBuffer(ridx: 0, widx: 416, cap: 1024))
-nb of responses: 3, nb of clients: 3
-nb of responses: 3, nb of clients: 2
-nb of responses: 3, nb of clients: 1
-nb of responses: 3, nb of clients: 0
-*/
 ```
