@@ -19,7 +19,7 @@ namespace Cycle.Net.Sample
         static void Main(string[] args)
         {
             var scheduler = new EventLoopScheduler();
-            new CycleNet().Run(Flow, scheduler, new Drivers()
+            new CycleNet().Run<AppSource>(Flow, scheduler, new Drivers()
             {
                 [LogDriver.ID] = LogDriver.Create,
                 [ApiDriver.ID] = ApiDriver.Create(scheduler),
@@ -55,6 +55,12 @@ namespace Cycle.Net.Sample
                 Api = apiState;
                 Tcp = tcpState;
             }
+        }
+
+        class AppSource : SimpleSource
+        {
+            public IObservable<ApiResponse> Api => GetDriver(ApiDriver.ID).OfType<ApiResponse>();
+            public IObservable<IDotNettyResponse> Tcp => GetDriver(DotNettyDriver.ID).OfType<IDotNettyResponse>();
         }
 
         static IObservable<ApiState> ApiStateStream(IObservable<ApiResponse> apiStream) =>
@@ -98,10 +104,10 @@ namespace Cycle.Net.Sample
                 .OfType<ClientDataReceived>()
                 .Select(data => new ClientDataSend(data.ClientId, data.Buffer));
 
-        static IObservable<IRequest> Flow(ISource source)
+        static IObservable<IRequest> Flow(AppSource source)
         {
-            var apiStream = source.GetDriver(ApiDriver.ID).OfType<ApiResponse>();
-            var tcpStream = source.GetDriver(DotNettyDriver.ID).OfType<IDotNettyResponse>();
+            var apiStream = source.Api;
+            var tcpStream = source.Tcp;
             var apiStateStream = ApiStateStream(apiStream);
             var tcpStateStream = TcpStateStream(tcpStream);
             var appStateStream = AppStateStream(

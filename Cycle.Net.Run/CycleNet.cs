@@ -15,9 +15,10 @@ namespace Cycle.Net.Run
 
     public class CycleNet : AbstractObservable<IRequest>, IObserver<IRequest>
     {
-        public void Run(Func<ISource, IObservable<IRequest>> main, IScheduler scheduler, Drivers drivers)
+        public void Run<TSource>(Func<TSource, IObservable<IRequest>> main, IScheduler scheduler, Drivers drivers)
+            where TSource : ISource, new()
         {
-            var source = new SimpleSource();
+            var source = new TSource();
             var ignore = Observable.Empty<IRequest>();
             foreach (var driver in drivers)
             {
