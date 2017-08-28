@@ -3,7 +3,7 @@ using Cycle.Net.Core.Abstract;
 
 namespace Cycle.Net.Http
 {
-    public sealed class HttpError : IHttpResponse
+    public class HttpError : IHttpResponse
     {
         public IHttpRequest Origin { get; }
         public Exception Error { get; }

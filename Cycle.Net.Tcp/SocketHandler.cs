@@ -44,18 +44,18 @@ namespace Cycle.Net.Tcp
                 }
             }
             m_group.Add(context.Channel);
-            Notify(new ClientConnected(context.Channel.Id));
+            Notify(new ClientConnected(context.Channel.Id.AsShortText()));
         }
 
         public override void ChannelInactive(IChannelHandlerContext context) =>
-            Notify(new ClientDisconnected(context.Channel.Id));
+            Notify(new ClientDisconnected(context.Channel.Id.AsShortText()));
 
         public override void ChannelRead(IChannelHandlerContext context, object message)
         {
             var buffer = message as IByteBuffer;
             if (buffer != null)
             {
-                Notify(new ClientDataReceived(context.Channel.Id, buffer.Copy()));
+                Notify(new ClientDataReceived(context.Channel.Id.AsShortText(), buffer.Copy()));
             }
         }
 
@@ -89,8 +89,8 @@ namespace Cycle.Net.Tcp
             {
                 case ClientDataSend send:
                     m_group.WriteAndFlushAsync(
-                        send.Buffer,
-                        new ChannelMatcher(channel => channel.Id == send.ClientId));
+                        Unpooled.WrappedBuffer(send.Buffer),
+                        new ChannelMatcher(channel => channel.Id.AsShortText() == send.ClientId));
                     break;
             }
         }

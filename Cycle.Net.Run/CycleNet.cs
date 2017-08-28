@@ -12,22 +12,36 @@ namespace Cycle.Net.Run
 {
     using Driver = IObservable<IResponse>;
     using DriverMaker = Func<IObservable<IRequest>, IObservable<IResponse>>;
-    using Drivers = Dictionary<string, Func<IObservable<IRequest>, IObservable<IResponse>>>;
+    using Drivers = IEnumerable<Func<IObservable<IRequest>, IObservable<IResponse>>>;
 
-    public class CycleNet : AbstractObservable<IRequest>, IObserver<IRequest>
+    public class CycleNet : AbstractObservable<IRequest>, IObserver<IRequest>, IObservable<IResponse>, IObserver<IResponse>
     {
-        public void Run<TSource>(Func<TSource, IObservable<IRequest>> main, IScheduler scheduler, Drivers drivers)
-            where TSource : ISource, new()
+        public static IScheduler Scheduler = new EventLoopScheduler();
+
+        private readonly List<IObserver<IResponse>> m_responseObservers;
+
+        public CycleNet()
         {
-            var source = new TSource();
-            var ignore = Observable.Empty<IRequest>();
+            m_responseObservers = new List<IObserver<IResponse>>();
+        }
+
+        public void Run(Func<IObservable<IResponse>, IObservable<IRequest>> main, Drivers drivers)
+        {
+            var sink = ((IObservable<IRequest>)this)
+                .SubscribeOn(Scheduler)
+                .ObserveOn(Scheduler);
+            var source = ((IObservable<IResponse>)this)
+                .SubscribeOn(Scheduler)
+                .ObserveOn(Scheduler);
             foreach (var driver in drivers)
             {
-                var stream = driver.Value(this);
-                ignore = ignore.Merge(stream.OfType<EmptyResponse>().SelectMany(response => Observable.Empty<IRequest>()));
-                source.AddDriver(driver.Key, stream.ObserveOn(scheduler));
+                driver(sink)
+                    .SubscribeOn(Scheduler)
+                    .ObserveOn(Scheduler)
+                    .Where(response => !(response is EmptyResponse))
+                    .Subscribe(this);
             }
-            main(source).Merge(ignore).Subscribe(this);
+            main(source).Subscribe(this);
         }
 
         public void OnCompleted() =>
@@ -36,7 +50,29 @@ namespace Cycle.Net.Run
         public void OnError(Exception error) =>
             NotifyError(error);
 
-        public void OnNext(IRequest value) =>
+        public void OnNext(IRequest value)
+        {
+#if DEBUG
+            Console.WriteLine($"[{value.GetType().Name}]");
+#endif
             NotifyNext(value);
+        }
+
+        public void OnNext(IResponse value)
+        {
+#if DEBUG
+            Console.WriteLine($"[{value.GetType().Name}]");
+#endif
+            Notify(observer => observer.OnNext(value));
+        }
+
+        private void Notify(Action<IObserver<IResponse>> fun) =>
+            m_responseObservers.ForEach(fun);
+
+        public IDisposable Subscribe(IObserver<IResponse> observer)
+        {
+            m_responseObservers.Add(observer);
+            return Disposable.Create(() => m_responseObservers.Remove(observer));
+        }
     }
 }

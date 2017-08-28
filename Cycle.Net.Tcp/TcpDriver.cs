@@ -27,7 +27,6 @@ namespace Cycle.Net.Tcp
         }
 
         public static async Task<Func<IObservable<IRequest>, IObservable<IResponse>>> Create(
-            IScheduler scheduler,
             Action<IChannelPipeline> pipelineConfigurator,
             int port)
         {

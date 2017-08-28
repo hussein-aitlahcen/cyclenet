@@ -6,8 +6,8 @@ namespace Cycle.Net.Tcp
 
     public sealed class ClientDisconnected : ITcpResponse
     {
-        public IChannelId ClientId { get; }
-        public ClientDisconnected(IChannelId clientId) => ClientId = clientId;
+        public string ClientId { get; }
+        public ClientDisconnected(string clientId) => ClientId = clientId;
     }
 
 }

@@ -10,7 +10,10 @@ using Cycle.Net.Run;
 using Cycle.Net.Http;
 using Cycle.Net.Tcp;
 using Cycle.Net.Log;
-using Cycle.Net.Sample.State;
+using System.Threading.Tasks;
+using System.Linq;
+using DotNetty.Buffers;
+using System.Reactive.Threading.Tasks;
 
 namespace Cycle.Net.Sample
 {
@@ -18,71 +21,85 @@ namespace Cycle.Net.Sample
     using DriverMaker = Func<IObservable<IRequest>, IObservable<IResponse>>;
     using Drivers = Dictionary<string, Func<IObservable<IRequest>, IObservable<IResponse>>>;
 
+    public sealed class TcpState
+    {
+        public static TcpState Initial = new TcpState(ImmutableHashSet.Create<string>());
+        public ImmutableHashSet<string> Clients { get; }
+        public TcpState(ImmutableHashSet<string> clients) => Clients = clients;
+
+        public static TcpState Reducer(TcpState previous, ITcpResponse response)
+        {
+            switch (response)
+            {
+                case ClientConnected connected:
+                    return new TcpState(previous.Clients.Add(connected.ClientId));
+                case ClientDisconnected disconnected:
+                    return new TcpState(previous.Clients.Remove(disconnected.ClientId));
+                default:
+                    return previous;
+            }
+        }
+    }
+
     public class Program
     {
         public static void Main(string[] args)
         {
-            var scheduler = new EventLoopScheduler();
-            new CycleNet().Run<AppSource>(Flow, scheduler, new Drivers()
-            {
-                [LogDriver.ID] = LogDriver.Create,
-                [HttpDriver.ID] = HttpDriver.Create(scheduler),
-                [TcpDriver.ID] = TcpDriver.Create(scheduler, pipe => { }, 5000).Result
-            });
+            Bootstrap().Wait();
             Console.Read();
         }
 
-        static HttpRequest RequestPosts = new HttpRequest("posts", "https://jsonplaceholder.typicode.com/posts");
+        private static async Task Bootstrap()
+        {
+            new CycleNet().Run(Flow, new[]
+            {
+                LogDriver.Create,
+                HttpDriver.Create(),
+                await TcpDriver.Create(pipe => { }, 5000)
+            });
+        }
+
         static HttpRequest RequestUsers = new HttpRequest("users", "https://jsonplaceholder.typicode.com/users");
-        static HttpRequest RequestComments = new HttpRequest("comments", "https://jsonplaceholder.typicode.com/comments");
 
-        public static IObservable<HttpState> HttpStateStream(IObservable<IHttpResponse> httpStream) =>
-            httpStream
-                .Scan(HttpState.Initial, HttpState.Reducer);
-
-        public static IObservable<TcpState> TcpStateStream(IObservable<ITcpResponse> tcpStream) =>
-            tcpStream
-                .Scan(TcpState.Initial, TcpState.Reducer);
-
-        public static IObservable<AppState> AppStateStream(IObservable<HttpState> httpStateStream, IObservable<TcpState> tcpStateStream) =>
-            Observable
-                .CombineLatest(httpStateStream, tcpStateStream, AppState.Combine);
+        public static IObservable<TcpState> TcpStateStream(IObservable<ITcpResponse> source) =>
+            source
+                .Scan(TcpState.Initial, TcpState.Reducer)
+                .DistinctUntilChanged();
 
         public static IObservable<ILogRequest> LogHttpStream(IObservable<IHttpResponse> httpStream) =>
             httpStream
-                .Select(response => new LogRequest($"response received: {response}"));
+                .Select(response => new LogRequest($"response received: {response.Origin.Id}"));
 
-        public static IObservable<ILogRequest> LogStateSink(IObservable<AppState> appStateStream) =>
-            appStateStream
-                .Select(state => new LogRequest($"nb of responses: {state.Http.Responses.Count}, nb of clients: {state.Tcp.Clients.Count}"));
+        public static IObservable<ILogRequest> LogStateSink(IObservable<TcpState> tcpStateStream) =>
+            tcpStateStream
+                .Select(state => new LogRequest($"nb of clients: {state.Clients.Count}"));
 
         public static IObservable<ILogRequest> LogTcpSink(IObservable<ITcpResponse> tcpStream) =>
             tcpStream
                 .OfType<ClientDataReceived>()
                 .Select(data => new LogRequest($"client data recv: {data.Buffer.ToString()}"));
 
-        public static IObservable<ITcpRequest> EchoTcpSink(IObservable<ITcpResponse> tcpStream) =>
+        public static IObservable<IHttpRequest> HttpSink(IObservable<ITcpResponse> tcpStream) =>
             tcpStream
-                .OfType<ClientDataReceived>()
-                .Select(data => new ClientDataSend(data.ClientId, data.Buffer));
+                .OfType<ClientConnected>()
+                .Select(connected => new HttpRequest(connected.ClientId, "https://jsonplaceholder.typicode.com/users"));
 
-        public static IObservable<IRequest> Flow(AppSource source)
+        public static IObservable<ITcpRequest> TcpSink(IObservable<IHttpResponse> httpStream) =>
+            httpStream
+                .OfType<HttpResponse>()
+                .SelectMany(response => response.Message.Content.ReadAsByteArrayAsync()
+                                            .ToObservable()
+                                            .Select(content => new ClientDataSend(response.Origin.Id, content))
+                                            .Do(request => response.Dispose()));
+
+        public static IObservable<IRequest> Flow(IObservable<IResponse> source)
         {
-            var httpStream = source.Http;
-            var tcpStream = source.Tcp;
-            var httpStateStream = HttpStateStream(httpStream);
+            var httpStream = source.OfType<IHttpResponse>();
+            var tcpStream = source.OfType<ITcpResponse>();
             var tcpStateStream = TcpStateStream(tcpStream);
-            var appStateStream = AppStateStream(
-                httpStateStream.StartWith(HttpState.Initial),
-                tcpStateStream.StartWith(TcpState.Initial));
-            var logSink = Observable.Merge(LogStateSink(appStateStream), LogTcpSink(tcpStream), LogHttpStream(httpStream));
-            var tcpSink = EchoTcpSink(tcpStream);
-            var httpSink = new IHttpRequest[]
-                {
-                    RequestPosts,
-                    RequestUsers,
-                    RequestComments
-                }.ToObservable();
+            var tcpSink = TcpSink(httpStream);
+            var httpSink = HttpSink(tcpStream);
+            var logSink = Observable.Merge(LogStateSink(tcpStateStream), LogTcpSink(tcpStream), LogHttpStream(httpStream));
             return Observable.Merge<IRequest>(httpSink, tcpSink, logSink);
         }
     }

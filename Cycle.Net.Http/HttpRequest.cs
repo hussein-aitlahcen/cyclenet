@@ -2,7 +2,7 @@ using Cycle.Net.Core.Abstract;
 
 namespace Cycle.Net.Http
 {
-    public sealed class HttpRequest : IHttpRequest
+    public class HttpRequest : IHttpRequest
     {
         public string Id { get; }
         public string Url { get; }

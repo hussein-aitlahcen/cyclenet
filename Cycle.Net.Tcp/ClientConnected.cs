@@ -5,7 +5,7 @@ namespace Cycle.Net.Tcp
 {
     public sealed class ClientConnected : ITcpResponse
     {
-        public IChannelId ClientId { get; }
-        public ClientConnected(IChannelId clientId) => ClientId = clientId;
+        public string ClientId { get; }
+        public ClientConnected(string clientId) => ClientId = clientId;
     }
 }

@@ -5,6 +5,6 @@ namespace Cycle.Net.Tcp
 {
     public interface ITcpResponse : IResponse
     {
-        IChannelId ClientId { get; }
+        string ClientId { get; }
     }
 }
