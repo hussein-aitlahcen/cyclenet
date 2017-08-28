@@ -2,6 +2,8 @@ using System;
 using System.Net.Http;
 using System.Reactive.Concurrency;
 using System.Reactive.Linq;
+using System.Reactive.Threading.Tasks;
+using System.Threading.Tasks;
 using Cycle.Net.Core.Abstract;
 
 namespace Cycle.Net.Http
@@ -15,9 +17,16 @@ namespace Cycle.Net.Http
                 .OfType<HttpRequest>()
                 .SelectMany
                 (
-                    request => Observable
-                        .FromAsync(() => new HttpClient().GetStringAsync(request.Url), scheduler)
-                        .Select(content => new HttpResponse(request, content))
+                    request => ExecuteRequest(request)
+                            .ToObservable(scheduler)
+                            .Catch((Exception exception) => Observable.Return(new HttpError(request, exception)))
                 );
+
+        private static async Task<IHttpResponse> ExecuteRequest(HttpRequest request)
+        {
+            var client = new HttpClient();
+            var content = await client.GetStringAsync(request.Url);
+            return new HttpResponse(request, content);
+        }
     }
 }

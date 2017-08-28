@@ -4,9 +4,9 @@ namespace Cycle.Net.Http
 {
     public sealed class HttpResponse : IHttpResponse
     {
-        public HttpRequest Origin { get; }
+        public IHttpRequest Origin { get; }
         public string Content { get; }
-        public HttpResponse(HttpRequest origin, string content)
+        public HttpResponse(IHttpRequest origin, string content)
         {
             Origin = origin;
             Content = content;

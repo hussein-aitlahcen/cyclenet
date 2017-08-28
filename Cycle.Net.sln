@@ -15,6 +15,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Cycle.Net.Tcp", "Cycle.Net.
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Cycle.Net.Log", "Cycle.Net.Log\Cycle.Net.Log.csproj", "{60380651-9174-4040-A078-21F71E6159E1}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Cycle.Net.Sample.Test", "Cycle.Net.Sample.Test\Cycle.Net.Sample.Test.csproj", "{2812B99C-8171-4B30-89D2-DD71B9CE2470}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -100,5 +102,17 @@ Global
 		{60380651-9174-4040-A078-21F71E6159E1}.Release|x64.Build.0 = Release|x64
 		{60380651-9174-4040-A078-21F71E6159E1}.Release|x86.ActiveCfg = Release|x86
 		{60380651-9174-4040-A078-21F71E6159E1}.Release|x86.Build.0 = Release|x86
+		{2812B99C-8171-4B30-89D2-DD71B9CE2470}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2812B99C-8171-4B30-89D2-DD71B9CE2470}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2812B99C-8171-4B30-89D2-DD71B9CE2470}.Debug|x64.ActiveCfg = Debug|x64
+		{2812B99C-8171-4B30-89D2-DD71B9CE2470}.Debug|x64.Build.0 = Debug|x64
+		{2812B99C-8171-4B30-89D2-DD71B9CE2470}.Debug|x86.ActiveCfg = Debug|x86
+		{2812B99C-8171-4B30-89D2-DD71B9CE2470}.Debug|x86.Build.0 = Debug|x86
+		{2812B99C-8171-4B30-89D2-DD71B9CE2470}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2812B99C-8171-4B30-89D2-DD71B9CE2470}.Release|Any CPU.Build.0 = Release|Any CPU
+		{2812B99C-8171-4B30-89D2-DD71B9CE2470}.Release|x64.ActiveCfg = Release|x64
+		{2812B99C-8171-4B30-89D2-DD71B9CE2470}.Release|x64.Build.0 = Release|x64
+		{2812B99C-8171-4B30-89D2-DD71B9CE2470}.Release|x86.ActiveCfg = Release|x86
+		{2812B99C-8171-4B30-89D2-DD71B9CE2470}.Release|x86.Build.0 = Release|x86
 	EndGlobalSection
 EndGlobal

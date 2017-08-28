@@ -4,5 +4,6 @@ namespace Cycle.Net.Http
 {
     public interface IHttpResponse : IResponse
     {
+        IHttpRequest Origin { get; }
     }
 }
