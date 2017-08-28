@@ -1,6 +1,6 @@
-using Cycle.Net.Run.Abstract;
+using Cycle.Net.Core.Abstract;
 
-namespace Cycle.Net.Run
+namespace Cycle.Net.Core
 {
     public sealed class EmptyRequest : IRequest
     {

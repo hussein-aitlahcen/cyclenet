@@ -1,6 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
     <ProjectReference Include="..\Cycle.Net.Run\Cycle.Net.Run.csproj" />
+    <ProjectReference Include="..\Cycle.Net.Core\Cycle.Net.Core.csproj" />
+    <ProjectReference Include="..\Cycle.Net.Http\Cycle.Net.Http.csproj" />
+    <ProjectReference Include="..\Cycle.Net.Tcp\Cycle.Net.Tcp.csproj" />
+    <ProjectReference Include="..\Cycle.Net.Log\Cycle.Net.Log.csproj" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="DotNetty.Handlers" Version="0.4.6" />

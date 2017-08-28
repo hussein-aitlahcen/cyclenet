@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using Cycle.Net.Run.Abstract;
+using Cycle.Net.Core.Abstract;
 
-namespace Cycle.Net.Run
+namespace Cycle.Net.Core
 {
     using Driver = IObservable<IResponse>;
 

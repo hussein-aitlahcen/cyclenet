@@ -1,12 +1,15 @@
 ﻿using System;
-using Cycle.Net.Run;
-using Cycle.Net.Run.Abstract;
+using Cycle.Net.Core;
+using Cycle.Net.Core.Abstract;
 using System.Reactive.Linq;
 using System.Reactive.Concurrency;
 using System.Collections.Immutable;
 using System.Collections.Generic;
 using DotNetty.Transport.Channels;
-using Cycle.Net.Sample.Driver;
+using Cycle.Net.Run;
+using Cycle.Net.Http;
+using Cycle.Net.Tcp;
+using Cycle.Net.Log;
 
 namespace Cycle.Net.Sample
 {
@@ -22,21 +25,21 @@ namespace Cycle.Net.Sample
             new CycleNet().Run<AppSource>(Flow, scheduler, new Drivers()
             {
                 [LogDriver.ID] = LogDriver.Create,
-                [ApiDriver.ID] = ApiDriver.Create(scheduler),
-                [DotNettyDriver.ID] = DotNettyDriver.Create(scheduler, pipe => { }, 5000).Result
+                [HttpDriver.ID] = HttpDriver.Create(scheduler),
+                [TcpDriver.ID] = TcpDriver.Create(scheduler, pipe => { }, 5000).Result
             });
             Console.Read();
         }
 
-        static ApiRequest RequestPosts = new ApiRequest("posts", "https://jsonplaceholder.typicode.com/posts");
-        static ApiRequest RequestUsers = new ApiRequest("users", "https://jsonplaceholder.typicode.com/users");
-        static ApiRequest RequestComments = new ApiRequest("comments", "https://jsonplaceholder.typicode.com/comments");
+        static HttpRequest RequestPosts = new HttpRequest("posts", "https://jsonplaceholder.typicode.com/posts");
+        static HttpRequest RequestUsers = new HttpRequest("users", "https://jsonplaceholder.typicode.com/users");
+        static HttpRequest RequestComments = new HttpRequest("comments", "https://jsonplaceholder.typicode.com/comments");
 
-        class ApiState
+        class HttpState
         {
-            public static ApiState Initial = new ApiState(ImmutableList.Create<ApiResponse>());
-            public ImmutableList<ApiResponse> Responses { get; }
-            public ApiState(ImmutableList<ApiResponse> responses) => Responses = responses;
+            public static HttpState Initial = new HttpState(ImmutableList.Create<HttpResponse>());
+            public ImmutableList<HttpResponse> Responses { get; }
+            public HttpState(ImmutableList<HttpResponse> responses) => Responses = responses;
         }
 
         class TcpState
@@ -48,27 +51,27 @@ namespace Cycle.Net.Sample
 
         class AppState
         {
-            public ApiState Api { get; }
+            public HttpState Http { get; }
             public TcpState Tcp { get; }
-            public AppState(ApiState apiState, TcpState tcpState)
+            public AppState(HttpState httpState, TcpState tcpState)
             {
-                Api = apiState;
+                Http = httpState;
                 Tcp = tcpState;
             }
         }
 
         class AppSource : SimpleSource
         {
-            public IObservable<ApiResponse> Api => GetDriver(ApiDriver.ID).OfType<ApiResponse>();
-            public IObservable<IDotNettyResponse> Tcp => GetDriver(DotNettyDriver.ID).OfType<IDotNettyResponse>();
+            public IObservable<HttpResponse> Http => GetDriver(HttpDriver.ID).OfType<HttpResponse>();
+            public IObservable<ITcpResponse> Tcp => GetDriver(TcpDriver.ID).OfType<ITcpResponse>();
         }
 
-        static IObservable<ApiState> ApiStateStream(IObservable<ApiResponse> apiStream) =>
-            apiStream
-                .Scan(ApiState.Initial, (state, response) => new ApiState(state.Responses.Add(response)));
+        static IObservable<HttpState> HttpStateStream(IObservable<HttpResponse> HttpStream) =>
+            HttpStream
+                .Scan(HttpState.Initial, (state, response) => new HttpState(state.Responses.Add(response)));
 
-        static IObservable<TcpState> TcpStateStream(IObservable<IDotNettyResponse> tcpStream) =>
-            Observable.Merge<IDotNettyResponse>(
+        static IObservable<TcpState> TcpStateStream(IObservable<ITcpResponse> tcpStream) =>
+            Observable.Merge<ITcpResponse>(
                 tcpStream.OfType<ClientConnected>(),
                 tcpStream.OfType<ClientDisconnected>()
             ).Scan(TcpState.Initial, (state, response) =>
@@ -83,35 +86,35 @@ namespace Cycle.Net.Sample
                     return state;
                 });
 
-        static IObservable<AppState> AppStateStream(IObservable<ApiState> apiStateStream, IObservable<TcpState> tcpStateStream) =>
+        static IObservable<AppState> AppStateStream(IObservable<HttpState> httpStateStream, IObservable<TcpState> tcpStateStream) =>
             Observable.CombineLatest(
-                apiStateStream,
+                httpStateStream,
                 tcpStateStream,
-                (apiState, tcpState) => new AppState(apiState, tcpState));
+                (httpState, tcpState) => new AppState(httpState, tcpState));
 
-        static IObservable<LogRequest> LogStateSink(IObservable<AppState> appStateStream) =>
+        static IObservable<ILogRequest> LogStateSink(IObservable<AppState> appStateStream) =>
             appStateStream
                 .Select(state => new LogRequest(
-                    $"nb of responses: {state.Api.Responses.Count}, nb of clients: {state.Tcp.Clients.Count}"));
+                    $"nb of responses: {state.Http.Responses.Count}, nb of clients: {state.Tcp.Clients.Count}"));
 
-        static IObservable<LogRequest> LogTcpSink(IObservable<IDotNettyResponse> tcpStream) =>
+        static IObservable<ILogRequest> LogTcpSink(IObservable<ITcpResponse> tcpStream) =>
             tcpStream
                 .OfType<ClientDataReceived>()
                 .Select(data => new LogRequest($"client data recv: {data.Buffer.ToString()}"));
 
-        static IObservable<IDotNettyRequest> EchoTcpSink(IObservable<IDotNettyResponse> tcpStream) =>
+        static IObservable<ITcpRequest> EchoTcpSink(IObservable<ITcpResponse> tcpStream) =>
             tcpStream
                 .OfType<ClientDataReceived>()
                 .Select(data => new ClientDataSend(data.ClientId, data.Buffer));
 
         static IObservable<IRequest> Flow(AppSource source)
         {
-            var apiStream = source.Api;
+            var httpStream = source.Http;
             var tcpStream = source.Tcp;
-            var apiStateStream = ApiStateStream(apiStream);
+            var httpStateStream = HttpStateStream(httpStream);
             var tcpStateStream = TcpStateStream(tcpStream);
             var appStateStream = AppStateStream(
-                apiStateStream.StartWith(ApiState.Initial),
+                httpStateStream.StartWith(HttpState.Initial),
                 tcpStateStream.StartWith(TcpState.Initial));
             var logSink = Observable.Merge(LogStateSink(appStateStream), LogTcpSink(tcpStream));
             var tcpSink = EchoTcpSink(tcpStream);

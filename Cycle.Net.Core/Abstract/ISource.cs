@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace Cycle.Net.Run.Abstract
+namespace Cycle.Net.Core.Abstract
 {
     using Driver = IObservable<IResponse>;
 

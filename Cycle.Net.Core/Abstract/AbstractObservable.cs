@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Reactive.Disposables;
 
-namespace Cycle.Net.Run.Abstract
+namespace Cycle.Net.Core.Abstract
 {
     public abstract class AbstractObservable<T> : IObservable<T>
     {

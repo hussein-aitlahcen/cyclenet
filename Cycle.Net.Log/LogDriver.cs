@@ -3,19 +3,11 @@ using System.Collections.Generic;
 using System.Reactive.Concurrency;
 using System.Reactive.Disposables;
 using System.Reactive.Linq;
-using Cycle.Net.Run;
-using Cycle.Net.Run.Abstract;
+using Cycle.Net.Core;
+using Cycle.Net.Core.Abstract;
 
-namespace Cycle.Net.Sample.Driver
+namespace Cycle.Net.Log
 {
-    public sealed class LogRequest : IRequest
-    {
-        public string Content { get; }
-        public LogRequest(string content) => Content = content;
-
-        public override string ToString() =>
-            $"LogRequest(contentLength={Content})";
-    }
 
     public sealed class LogDriver
     {

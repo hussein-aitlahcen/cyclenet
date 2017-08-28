@@ -1,4 +1,4 @@
-namespace Cycle.Net.Run.Abstract
+namespace Cycle.Net.Core.Abstract
 {
     public interface IResponse
     {
