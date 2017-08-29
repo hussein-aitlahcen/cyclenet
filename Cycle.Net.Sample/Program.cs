@@ -125,7 +125,7 @@ namespace Cycle.Net.Sample
             var logTcpClientSink = LogTcpClientStateStream(tcpClientsStream);
             var logSink = Observable.Merge(logTcpSink, logHttpSink, logTcpClientSink);
 
-            return Observable.Merge<IRequest>(tcpSink, httpSink);
+            return Observable.Merge<IRequest>(tcpSink, httpSink, logSink);
         }
     }
 }

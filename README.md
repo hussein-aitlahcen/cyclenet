@@ -76,14 +76,19 @@ public class Program
             .GroupBy(response => response.ClientId)
             .SelectMany(group => group
                             .TakeWhile(response => !(response is ClientDisconnected))
-                            .Scan(new TcpClientState(group.Key), TcpClientState.Reducer)
-                            .DistinctUntilChanged())
+                            .Scan(new TcpClientState(group.Key), TcpClientState.Reducer))
             .GroupBy(state => state.Id);
 
-    public static IObservable<ITcpRequest> EchoBytesReceivedStream(IObservable<IObservable<TcpClientState>> clientStatesStream) =>
+    public static IObservable<ITcpRequest> EchoBytesReceivedStream(IObservable<IGroupedObservable<string, TcpClientState>> clientStatesStream) =>
         clientStatesStream
             .SelectMany(stateStream => stateStream
-                                            .Select(state => new ClientDataSend(state.Id, Encoding.UTF8.GetBytes($"bytes received: {state.BytesReceived.ToString()}"))));
+                                            .Skip(1) // ignore initial state
+                                            .Select(state => new ClientDataSend(
+                                                state.Id,
+                                                Unpooled.WrappedBuffer(Encoding.UTF8.GetBytes($"bytes received: {state.BytesReceived.ToString()}"))))
+                                            .Take(1) // echo once and kick
+                                            .Concat<ITcpRequest>(
+                                                Observable.Return(new ClientKick(stateStream.Key))));
 
     public static IObservable<ILogRequest> LogTcpClientStateStream(IObservable<IObservable<TcpClientState>> clientStatesStream) =>
         clientStatesStream
