@@ -55,7 +55,7 @@ namespace Cycle.Net.Tcp
             var buffer = message as IByteBuffer;
             if (buffer != null)
             {
-                Notify(new ClientDataReceived(context.Channel.Id.AsShortText(), buffer.Copy()));
+                Notify(new ClientDataReceived(context.Channel.Id.AsShortText(), buffer));
             }
         }
 
