@@ -22,7 +22,6 @@ using Driver = IObservable<IResponse>;
 using DriverMaker = Func<IObservable<IRequest>, IObservable<IResponse>>;
 using Drivers = Dictionary<string, Func<IObservable<IRequest>, IObservable<IResponse>>>;
 
-
 public sealed class TcpClientState
 {
     public string Id { get; }
@@ -38,8 +37,16 @@ public sealed class TcpClientState
         BytesReceived = bytesReceived;
     }
 
-    public static TcpClientState Reducer(TcpClientState previous, int bytesReceived) =>
-        new TcpClientState(previous.Id, previous.BytesReceived + bytesReceived);
+    public static TcpClientState Reducer(TcpClientState previous, ITcpResponse message)
+    {
+        switch (message)
+        {
+            case ClientDataReceived received:
+                return new TcpClientState(previous.Id, previous.BytesReceived + received.Buffer.ReadableBytes);
+            default:
+                return previous;
+        }
+    }
 }
 
 public class Program
@@ -64,28 +71,14 @@ public class Program
         });
     }
 
-    public static IObservable<IObservable<TcpClientState>> TcpClientStatesStream(IObservable<ITcpResponse> tcpStream) =>
+    public static IObservable<IGroupedObservable<string, TcpClientState>> TcpClientStatesStream(IObservable<ITcpResponse> tcpStream) =>
         tcpStream
-            .OfType<ClientConnected>()
-            .Select(connected =>
-            {
-                var eventStream = tcpStream
-                                    .Where(response => response.ClientId == connected.ClientId)
-                                    .TakeWhile(response =>
-                                    {
-                                        var clientDisconnected = response as ClientDisconnected;
-                                        if (clientDisconnected != null)
-                                        {
-                                            return clientDisconnected.ClientId != connected.ClientId;
-                                        }
-                                        return true;
-                                    });
-                var stateStream = eventStream
-                            .OfType<ClientDataReceived>()
-                            .Select(data => data.Buffer.ReadableBytes)
-                            .Scan(new TcpClientState(connected.ClientId), TcpClientState.Reducer);
-                return stateStream;
-            });
+            .GroupBy(response => response.ClientId)
+            .SelectMany(group => group
+                            .TakeWhile(response => !(response is ClientDisconnected))
+                            .Scan(new TcpClientState(group.Key), TcpClientState.Reducer)
+                            .DistinctUntilChanged())
+            .GroupBy(state => state.Id);
 
     public static IObservable<ITcpRequest> EchoBytesReceivedStream(IObservable<IObservable<TcpClientState>> clientStatesStream) =>
         clientStatesStream
