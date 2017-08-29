@@ -13,6 +13,12 @@ namespace Cycle.Net.Tcp
     {
         private class ChannelMatcher : IChannelMatcher
         {
+            public static ChannelMatcher Target(string channelId) =>
+                new ChannelMatcher(channel => channel.Id.AsShortText() == channelId);
+
+            public static ChannelMatcher Except(string channelId) =>
+                new ChannelMatcher(channel => channel.Id.AsShortText() != channelId);
+
             private readonly Predicate<IChannel> m_predicate;
 
             public ChannelMatcher(Predicate<IChannel> predicate)
@@ -47,8 +53,11 @@ namespace Cycle.Net.Tcp
             Notify(new ClientConnected(context.Channel.Id.AsShortText()));
         }
 
-        public override void ChannelInactive(IChannelHandlerContext context) =>
+        public override void ChannelInactive(IChannelHandlerContext context)
+        {
+            m_group.Remove(context.Channel);
             Notify(new ClientDisconnected(context.Channel.Id.AsShortText()));
+        }
 
         public override void ChannelRead(IChannelHandlerContext context, object message)
         {
@@ -88,9 +97,14 @@ namespace Cycle.Net.Tcp
             switch (value)
             {
                 case ClientDataSend send:
-                    m_group.WriteAndFlushAsync(
-                        Unpooled.WrappedBuffer(send.Buffer),
-                        new ChannelMatcher(channel => channel.Id.AsShortText() == send.ClientId));
+                    m_group
+                        .WriteAndFlushAsync(
+                            send.Buffer,
+                            ChannelMatcher.Target(send.ClientId));
+                    break;
+
+                case ClientKick kick:
+                    m_group.DisconnectAsync(ChannelMatcher.Target(kick.ClientId));
                     break;
             }
         }

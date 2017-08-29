@@ -9,8 +9,8 @@ namespace Cycle.Net.Tcp
     {
 
         public string ClientId { get; }
-        public byte[] Buffer { get; }
-        public ClientDataSend(string clientId, byte[] buffer)
+        public IByteBuffer Buffer { get; }
+        public ClientDataSend(string clientId, IByteBuffer buffer)
         {
             ClientId = clientId;
             Buffer = buffer;
