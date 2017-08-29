@@ -20,23 +20,20 @@ namespace Cycle.Net.Run
 
         public static void Run(Func<IObservable<IResponse>, IObservable<IRequest>> main, Drivers drivers)
         {
-            var requestSubject = new Subject<IRequest>();
-            var responseSubject = new Subject<IResponse>();
-            var sink = requestSubject
-                .SubscribeOn(Scheduler);
-            var source = responseSubject
-                .SubscribeOn(Scheduler);
+            // replay subjects ensure initial requests and responses are dispatched
+            var requestSubject = new ReplaySubject<IRequest>();
+            var responseSubject = new ReplaySubject<IResponse>();
+            // make sure our source and sink are cached
+            var sink = requestSubject.Publish().RefCount();
+            var source = responseSubject.Publish().RefCount();
             foreach (var driver in drivers)
             {
                 driver(sink)
+                    // ignore driver that does not give an output
                     .Where(response => !(response is EmptyResponse))
-                    .Publish()
-                    .RefCount()
                     .Subscribe(responseSubject);
             }
             main(source)
-                .Publish()
-                .RefCount()
                 .Subscribe(requestSubject);
         }
     }
