@@ -68,11 +68,13 @@ namespace Cycle.Net.Tcp
             }
         }
 
-        private void Notify(ITcpResponse response) =>
+        private void Notify(ITcpResponse response)
+        {
             m_observers.ForEach
             (
                 observer => observer.OnNext(response)
             );
+        }
 
         public override void ExceptionCaught(IChannelHandlerContext context, Exception exception) =>
             context.CloseAsync();

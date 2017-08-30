@@ -20,7 +20,6 @@ namespace Cycle.Net.Http
                     (
                         request => Task.Run(() => ExecuteRequest(request))
                                 .ToObservable()
-                                .DistinctUntilChanged()
                                 .Catch((Exception exception) => Observable.Return(new HttpError(request, exception)))
                     );
 

@@ -76,9 +76,9 @@ namespace Cycle.Net.Sample
         public static IObservable<IGroupedObservable<string, TcpClientState>> TcpClientStatesStream(IObservable<ITcpResponse> tcpStream) =>
             tcpStream
                 .GroupBy(response => response.ClientId)
-                .SelectMany(group => group
-                                .TakeWhile(response => !(response is ClientDisconnected))
-                                .Scan(new TcpClientState(group.Key), TcpClientState.Reducer))
+                .SelectMany(clientStream => clientStream
+                                                .TakeWhile(response => !(response is ClientDisconnected))
+                                                .Scan(new TcpClientState(clientStream.Key), TcpClientState.Reducer))
                 .GroupBy(state => state.Id);
 
         public static IObservable<ITcpRequest> EchoBytesReceivedStream(IObservable<IGroupedObservable<string, TcpClientState>> clientStatesStream) =>
