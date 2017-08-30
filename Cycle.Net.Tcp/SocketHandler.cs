@@ -98,11 +98,12 @@ namespace Cycle.Net.Tcp
         {
             switch (value)
             {
+                case ClientDataBroadcast broadcast:
+                    m_group.WriteAndFlushAsync(broadcast.Buffer);
+                    break;
+
                 case ClientDataSend send:
-                    m_group
-                        .WriteAndFlushAsync(
-                            send.Buffer,
-                            ChannelMatcher.Target(send.ClientId));
+                    m_group.WriteAndFlushAsync(send.Buffer, ChannelMatcher.Target(send.ClientId));
                     break;
 
                 case ClientKick kick:
