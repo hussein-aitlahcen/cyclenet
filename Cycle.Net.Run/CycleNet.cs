@@ -23,8 +23,8 @@ namespace Cycle.Net.Run
             var requestSubject = new Subject<IRequest>();
             var responseSubject = new Subject<IResponse>();
             // make sure our source and sink are cached and subscription happen on the scheduler
-            var sink = requestSubject.AsObservable().SubscribeOn(Scheduler);
-            var source = responseSubject.AsObservable().SubscribeOn(Scheduler);
+            var sink = requestSubject.AsObservable().ObserveOn(Scheduler).SubscribeOn(Scheduler);
+            var source = responseSubject.AsObservable().ObserveOn(Scheduler).SubscribeOn(Scheduler);
             foreach (var driver in drivers)
             {
                 driver(sink)

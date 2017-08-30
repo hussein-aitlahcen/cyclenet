@@ -67,16 +67,36 @@ public class Program
         {
             LogDriver.Create,
             HttpDriver.Create(),
-            await TcpDriver.Create(pipe => { }, 5000)
+            await TcpDriver.Create(5000)
         });
     }
+
+    public static IObservable<ILogRequest> LogOnlineClient(IObservable<int> onlineClientStream) =>
+        onlineClientStream
+            .Select(counter => new LogRequest($"there are {counter} clients online."));
+
+    public static IObservable<int> OnlineClientCounter(IObservable<ITcpResponse> tcpStream) =>
+        tcpStream
+            .Scan(0, (counter, response) =>
+            {
+                switch (response)
+                {
+                    case ClientConnected connected:
+                        return counter + 1;
+                    case ClientDisconnected disconnected:
+                        return counter - 1;
+                    default:
+                        return counter;
+                }
+            })
+            .DistinctUntilChanged();
 
     public static IObservable<IGroupedObservable<string, TcpClientState>> TcpClientStatesStream(IObservable<ITcpResponse> tcpStream) =>
         tcpStream
             .GroupBy(response => response.ClientId)
-            .SelectMany(group => group
-                            .TakeWhile(response => !(response is ClientDisconnected))
-                            .Scan(new TcpClientState(group.Key), TcpClientState.Reducer))
+            .SelectMany(clientStream => clientStream
+                                            .TakeWhile(response => !(response is ClientDisconnected))
+                                            .Scan(new TcpClientState(clientStream.Key), TcpClientState.Reducer))
             .GroupBy(state => state.Id);
 
     public static IObservable<ITcpRequest> EchoBytesReceivedStream(IObservable<IGroupedObservable<string, TcpClientState>> clientStatesStream) =>
@@ -109,6 +129,7 @@ public class Program
         var httpStream = source.OfType<IHttpResponse>();
         var tcpStream = source.OfType<ITcpResponse>();
         var tcpClientsStream = TcpClientStatesStream(tcpStream);
+        var onlineCountStream = OnlineClientCounter(tcpStream);
 
         var tcpSink = EchoBytesReceivedStream(tcpClientsStream);
         var httpSink = new[]
@@ -118,12 +139,13 @@ public class Program
             RequestComments
         }.ToObservable();
 
+        var logOnlineCount = LogOnlineClient(onlineCountStream);
         var logTcpSink = LogTcpSink(tcpStream);
         var logHttpSink = LogHttpStream(httpStream);
         var logTcpClientSink = LogTcpClientStateStream(tcpClientsStream);
         var logSink = Observable.Merge(logTcpSink, logHttpSink, logTcpClientSink);
 
-        return Observable.Merge<IRequest>(tcpSink, httpSink, logSink);
+        return Observable.Merge<IRequest>(tcpSink, httpSink, logOnlineCount);
     }
 }
 ```

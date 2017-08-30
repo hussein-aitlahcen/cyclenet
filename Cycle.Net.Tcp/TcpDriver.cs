@@ -20,11 +20,16 @@ namespace Cycle.Net.Tcp
     {
         public const string ID = "tcp-driver";
 
-        public static void BasicPipelineConfigurator(IChannelPipeline pipeline)
+
+        public static void EmptyPipelineConfigurator(IChannelPipeline pipeline) { }
+
+        public static void FramingPipelineConfigurator(IChannelPipeline pipeline)
         {
             pipeline.AddLast("framing-enc", new LengthFieldPrepender(2));
             pipeline.AddLast("framing-dec", new LengthFieldBasedFrameDecoder(ushort.MaxValue, 0, 2, 0, 2));
         }
+        public static async Task<Func<IObservable<IRequest>, IObservable<IResponse>>> Create(int port) =>
+            await Create(EmptyPipelineConfigurator, port);
 
         public static async Task<Func<IObservable<IRequest>, IObservable<IResponse>>> Create(
             Action<IChannelPipeline> pipelineConfigurator,
