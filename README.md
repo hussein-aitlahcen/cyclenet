@@ -110,19 +110,10 @@ public class Program
                                             .Concat<ITcpRequest>(
                                                 Observable.Return(new ClientKick(stateStream.Key))));
 
-    public static IObservable<ILogRequest> LogTcpClientStateStream(IObservable<IObservable<TcpClientState>> clientStatesStream) =>
-        clientStatesStream
-            .SelectMany(stateStream => stateStream
-                                            .Select(state => new LogRequest($"tcp client: id={state.Id}, bytesReceived={state.BytesReceived}")));
-
     public static IObservable<ILogRequest> LogHttpStream(IObservable<IHttpResponse> httpStream) =>
         httpStream
             .Select(response => new LogRequest($"http response: id={response.Origin.Id}"));
 
-    public static IObservable<ILogRequest> LogTcpSink(IObservable<ITcpResponse> tcpStream) =>
-        tcpStream
-            .OfType<ClientDataReceived>()
-            .Select(data => new LogRequest($"tcp client: data={data.Buffer.ToString()}"));
 
     public static IObservable<IRequest> Flow(IObservable<IResponse> source)
     {
@@ -140,12 +131,10 @@ public class Program
         }.ToObservable();
 
         var logOnlineCount = LogOnlineClient(onlineCountStream);
-        var logTcpSink = LogTcpSink(tcpStream);
         var logHttpSink = LogHttpStream(httpStream);
-        var logTcpClientSink = LogTcpClientStateStream(tcpClientsStream);
-        var logSink = Observable.Merge(logTcpSink, logHttpSink, logTcpClientSink);
+        var logSink = Observable.Merge(logHttpSink, logOnlineCount);
 
-        return Observable.Merge<IRequest>(tcpSink, httpSink, logOnlineCount);
+        return Observable.Merge<IRequest>(tcpSink, httpSink, logSink);
     }
 }
 ```
