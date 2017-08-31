@@ -25,9 +25,10 @@ namespace Cycle.Net.Run
             var observableProxy = proxy.AsObservable();
             var observerProxy = proxy.AsObserver();
             main(Observable.Merge(drivers.Select(driver =>
-                driver(observableProxy)
-                    .Where(response => !(response is EmptyResponse))
-                ))
+                    driver(observableProxy)
+                        .Where(response => !(response is EmptyResponse))
+                    )
+                )
                 .SubscribeOn(Scheduler)
                 .ObserveOn(Scheduler)
                 .Publish()
