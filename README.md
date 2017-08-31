@@ -22,6 +22,14 @@ using Driver = IObservable<IResponse>;
 using DriverMaker = Func<IObservable<IRequest>, IObservable<IResponse>>;
 using Drivers = Dictionary<string, Func<IObservable<IRequest>, IObservable<IResponse>>>;
 
+public static class Helper
+{
+    public static Func<T, T> Identity<T>() => x => x;
+
+    public static Func<TIn, TOut> Compose<TIn, TTransform, TOut>(
+        this Func<TIn, TTransform> f, Func<TTransform, TOut> g) => x => g(f(x));
+}
+
 public sealed class TcpClientState
 {
     public string Id { get; }
@@ -37,14 +45,14 @@ public sealed class TcpClientState
         BytesReceived = bytesReceived;
     }
 
-    public static TcpClientState Reducer(TcpClientState previous, ITcpResponse message)
+    public static Func<TcpClientState, TcpClientState> Reducers(Func<TcpClientState, TcpClientState> fun, ITcpResponse message)
     {
         switch (message)
         {
             case ClientDataReceived received:
-                return new TcpClientState(previous.Id, previous.BytesReceived + received.Buffer.ReadableBytes);
+                return fun.Compose(previous => new TcpClientState(previous.Id, previous.BytesReceived + received.Buffer.ReadableBytes));
             default:
-                return previous;
+                return fun;
         }
     }
 }
@@ -77,26 +85,29 @@ public class Program
 
     public static IObservable<int> OnlineClientCounter(IObservable<ITcpResponse> tcpStream) =>
         tcpStream
-            .Scan(0, (counter, response) =>
-            {
-                switch (response)
+            .Scan(Helper.Identity<int>(), (fun, response) =>
                 {
-                    case ClientConnected connected:
-                        return counter + 1;
-                    case ClientDisconnected disconnected:
-                        return counter - 1;
-                    default:
-                        return counter;
+                    switch (response)
+                    {
+                        case ClientConnected connected:
+                            return x => fun(x) + 1;
+                        case ClientDisconnected disconnected:
+                            return x => fun(x) - 1;
+                        default:
+                            return fun;
+                    }
                 }
-            })
+            )
+            .Select(fun => fun(0))
             .DistinctUntilChanged();
 
     public static IObservable<IGroupedObservable<string, TcpClientState>> TcpClientStatesStream(IObservable<ITcpResponse> tcpStream) =>
         tcpStream
             .GroupBy(response => response.ClientId)
             .SelectMany(clientStream => clientStream
-                                            .TakeWhile(response => !(response is ClientDisconnected))
-                                            .Scan(new TcpClientState(clientStream.Key), TcpClientState.Reducer))
+                    .TakeWhile(response => !(response is ClientDisconnected))
+                    .Scan(Helper.Identity<TcpClientState>(), TcpClientState.Reducers)
+                    .Select(fun => fun(new TcpClientState(clientStream.Key))))
             .GroupBy(state => state.Id);
 
     public static IObservable<ITcpRequest> EchoBytesReceivedStream(IObservable<IGroupedObservable<string, TcpClientState>> clientStatesStream) =>

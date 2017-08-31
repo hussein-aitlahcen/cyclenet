@@ -24,6 +24,14 @@ namespace Cycle.Net.Sample
     using DriverMaker = Func<IObservable<IRequest>, IObservable<IResponse>>;
     using Drivers = Dictionary<string, Func<IObservable<IRequest>, IObservable<IResponse>>>;
 
+    public static class Helper
+    {
+        public static Func<T, T> Identity<T>() => x => x;
+
+        public static Func<TIn, TOut> Compose<TIn, TTransform, TOut>(
+            this Func<TIn, TTransform> f, Func<TTransform, TOut> g) => x => g(f(x));
+    }
+
     public sealed class TcpClientState
     {
         public string Id { get; }
@@ -39,14 +47,14 @@ namespace Cycle.Net.Sample
             BytesReceived = bytesReceived;
         }
 
-        public static TcpClientState Reducer(TcpClientState previous, ITcpResponse message)
+        public static Func<TcpClientState, TcpClientState> Reducers(Func<TcpClientState, TcpClientState> fun, ITcpResponse message)
         {
             switch (message)
             {
                 case ClientDataReceived received:
-                    return new TcpClientState(previous.Id, previous.BytesReceived + received.Buffer.ReadableBytes);
+                    return fun.Compose(previous => new TcpClientState(previous.Id, previous.BytesReceived + received.Buffer.ReadableBytes));
                 default:
-                    return previous;
+                    return fun;
             }
         }
     }
@@ -79,7 +87,7 @@ namespace Cycle.Net.Sample
 
         public static IObservable<int> OnlineClientCounter(IObservable<ITcpResponse> tcpStream) =>
             tcpStream
-                .Scan(new Func<int, int>(x => x), (fun, response) =>
+                .Scan(Helper.Identity<int>(), (fun, response) =>
                  {
                      switch (response)
                      {
@@ -99,8 +107,9 @@ namespace Cycle.Net.Sample
             tcpStream
                 .GroupBy(response => response.ClientId)
                 .SelectMany(clientStream => clientStream
-                                                .TakeWhile(response => !(response is ClientDisconnected))
-                                                .Scan(new TcpClientState(clientStream.Key), TcpClientState.Reducer))
+                       .TakeWhile(response => !(response is ClientDisconnected))
+                       .Scan(Helper.Identity<TcpClientState>(), TcpClientState.Reducers)
+                       .Select(fun => fun(new TcpClientState(clientStream.Key))))
                 .GroupBy(state => state.Id);
 
         public static IObservable<ITcpRequest> EchoBytesReceivedStream(IObservable<IGroupedObservable<string, TcpClientState>> clientStatesStream) =>
