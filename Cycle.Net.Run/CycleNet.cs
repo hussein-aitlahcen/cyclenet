@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Reactive;
 using System.Reactive.Linq;
 using System.Reactive.Disposables;
@@ -20,20 +21,19 @@ namespace Cycle.Net.Run
 
         public static void Run(Func<IObservable<IResponse>, IObservable<IRequest>> main, Drivers drivers)
         {
-            var requestSubject = new Subject<IRequest>();
-            var responseSubject = new Subject<IResponse>();
-            // make sure our source and sink are cached and subscription happen on the scheduler
-            var sink = requestSubject.AsObservable().ObserveOn(Scheduler).SubscribeOn(Scheduler);
-            var source = responseSubject.AsObservable().ObserveOn(Scheduler).SubscribeOn(Scheduler);
-            foreach (var driver in drivers)
-            {
-                driver(sink)
-                    // ignore driver that does not give an output
+            var proxy = new Subject<IRequest>();
+            var observableProxy = proxy.AsObservable();
+            var observerProxy = proxy.AsObserver();
+            main(Observable.Merge(drivers.Select(driver =>
+                driver(observableProxy)
                     .Where(response => !(response is EmptyResponse))
-                    .Subscribe(responseSubject.AsObserver());
-            }
-            main(source)
-                .Subscribe(requestSubject.AsObserver());
+                ))
+                .SubscribeOn(Scheduler)
+                .ObserveOn(Scheduler)
+                .Publish()
+                .RefCount()
+            )
+            .Subscribe(observerProxy);
         }
     }
 }
