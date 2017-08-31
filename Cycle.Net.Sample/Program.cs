@@ -79,18 +79,20 @@ namespace Cycle.Net.Sample
 
         public static IObservable<int> OnlineClientCounter(IObservable<ITcpResponse> tcpStream) =>
             tcpStream
-                .Scan(0, (counter, response) =>
-                {
-                    switch (response)
-                    {
-                        case ClientConnected connected:
-                            return counter + 1;
-                        case ClientDisconnected disconnected:
-                            return counter - 1;
-                        default:
-                            return counter;
-                    }
-                })
+                .Scan(new Func<int, int>(x => x), (fun, response) =>
+                 {
+                     switch (response)
+                     {
+                         case ClientConnected connected:
+                             return x => fun(x) + 1;
+                         case ClientDisconnected disconnected:
+                             return x => fun(x) - 1;
+                         default:
+                             return fun;
+                     }
+                 }
+                )
+                .Select(fun => fun(0))
                 .DistinctUntilChanged();
 
         public static IObservable<IGroupedObservable<string, TcpClientState>> TcpClientStatesStream(IObservable<ITcpResponse> tcpStream) =>
