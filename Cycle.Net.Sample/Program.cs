@@ -28,7 +28,7 @@ namespace Cycle.Net.Sample
     {
         public static Func<T, T> Identity<T>() => x => x;
 
-        public static Func<TIn, TOut> Compose<TIn, TTransform, TOut>(
+        public static Func<TIn, TOut> AndThen<TIn, TTransform, TOut>(
             this Func<TIn, TTransform> f, Func<TTransform, TOut> g) => x => g(f(x));
     }
 
@@ -47,14 +47,14 @@ namespace Cycle.Net.Sample
             BytesReceived = bytesReceived;
         }
 
-        public static Func<TcpClientState, TcpClientState> Reducers(Func<TcpClientState, TcpClientState> fun, ITcpResponse message)
+        public static Func<TcpClientState, TcpClientState> Reducer(ITcpResponse message)
         {
             switch (message)
             {
                 case ClientDataReceived received:
-                    return fun.Compose(previous => new TcpClientState(previous.Id, previous.BytesReceived + received.Buffer.ReadableBytes));
+                    return previous => new TcpClientState(previous.Id, previous.BytesReceived + received.Buffer.ReadableBytes);
                 default:
-                    return fun;
+                    return Helper.Identity<TcpClientState>();
             }
         }
     }
@@ -87,20 +87,18 @@ namespace Cycle.Net.Sample
 
         public static IObservable<int> OnlineClientCounter(IObservable<ITcpResponse> tcpStream) =>
             tcpStream
-                .Scan(Helper.Identity<int>(), (fun, response) =>
-                 {
-                     switch (response)
-                     {
-                         case ClientConnected connected:
-                             return x => fun(x) + 1;
-                         case ClientDisconnected disconnected:
-                             return x => fun(x) - 1;
-                         default:
-                             return fun;
-                     }
-                 }
-                )
-                .Select(fun => fun(0))
+                .Scan(0, (counter, response) =>
+                {
+                    switch (response)
+                    {
+                        case ClientConnected connected:
+                            return counter + 1;
+                        case ClientDisconnected disconnected:
+                            return counter - 1;
+                        default:
+                            return counter;
+                    }
+                })
                 .DistinctUntilChanged();
 
         public static IObservable<IGroupedObservable<string, TcpClientState>> TcpClientStatesStream(IObservable<ITcpResponse> tcpStream) =>
@@ -108,8 +106,8 @@ namespace Cycle.Net.Sample
                 .GroupBy(response => response.ClientId)
                 .SelectMany(clientStream => clientStream
                        .TakeWhile(response => !(response is ClientDisconnected))
-                       .Scan(Helper.Identity<TcpClientState>(), TcpClientState.Reducers)
-                       .Select(fun => fun(new TcpClientState(clientStream.Key))))
+                       .Select(TcpClientState.Reducer)
+                       .Scan(new TcpClientState(clientStream.Key), (state, reducer) => reducer(state)))
                 .GroupBy(state => state.Id);
 
         public static IObservable<ITcpRequest> EchoBytesReceivedStream(IObservable<IGroupedObservable<string, TcpClientState>> clientStatesStream) =>
@@ -126,7 +124,6 @@ namespace Cycle.Net.Sample
         public static IObservable<ILogRequest> LogHttpStream(IObservable<IHttpResponse> httpStream) =>
             httpStream
                 .Select(response => new LogRequest($"http response: id={response.Origin.Id}"));
-
 
         public static IObservable<IRequest> Flow(IObservable<IResponse> source)
         {
