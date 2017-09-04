@@ -17,6 +17,7 @@ using System.Reactive.Threading.Tasks;
 using System.Reactive.Subjects;
 using System.Reactive;
 using System.Text;
+using Cycle.Net.State;
 
 namespace Cycle.Net.Sample
 {
@@ -24,47 +25,66 @@ namespace Cycle.Net.Sample
     using DriverMaker = Func<IObservable<IRequest>, IObservable<IResponse>>;
     using Drivers = Dictionary<string, Func<IObservable<IRequest>, IObservable<IResponse>>>;
 
-    public static class Helper
+    public sealed class AppState : AbstractReducableState<AppState>
     {
-        public static Func<T, T> Identity<T>() => x => x;
-
-        public static Func<TIn, TOut> AndThen<TIn, TTransform, TOut>(
-            this Func<TIn, TTransform> f, Func<TTransform, TOut> g) => x => g(f(x));
+        public ImmutableList<string> Clients { get; }
+        public AppState() : this(ImmutableList.Create<string>()) { }
+        public AppState(ImmutableList<string> clients) => Clients = clients;
+        public override AppState Reduce(IResponse response)
+        {
+            switch (response)
+            {
+                case ClientConnected connected:
+                    return new AppState(Clients.Add(connected.ClientId));
+                case ClientDisconnected disconnected:
+                    return new AppState(Clients.Remove(disconnected.ClientId));
+                default:
+                    return this;
+            }
+        }
     }
 
-    public sealed class TcpClientState
+    public sealed class TcpClientState : AbstractReducableState<TcpClientState>
     {
         public string Id { get; }
         public int BytesReceived { get; }
-
-        public TcpClientState(string id) : this(id, 0)
+        public int MessagesReceived { get; }
+        public TcpClientState(string id) : this(id, 0, 0)
         {
         }
 
-        public TcpClientState(string id, int bytesReceived)
+        public TcpClientState(string id, int bytesReceived, int messagesReceived)
         {
             Id = id;
             BytesReceived = bytesReceived;
+            MessagesReceived = messagesReceived;
         }
 
-        public static Func<TcpClientState, TcpClientState> Reducer(ITcpResponse message)
+        public override TcpClientState Reduce(IResponse response)
         {
-            switch (message)
+            switch (response)
             {
                 case ClientDataReceived received:
-                    return previous => new TcpClientState(previous.Id, previous.BytesReceived + received.Buffer.ReadableBytes);
+                    return new TcpClientState(Id, BytesReceived + received.Buffer.ReadableBytes, MessagesReceived + 1);
                 default:
-                    return Helper.Identity<TcpClientState>();
+                    return this;
             }
+        }
+    }
+
+    public sealed class TcpClientCommand
+    {
+        public TcpClientState Client { get; }
+        public string Text { get; }
+        public TcpClientCommand(TcpClientState client, string text)
+        {
+            Client = client;
+            Text = text;
         }
     }
 
     public class Program
     {
-        private static HttpRequest RequestPosts = new HttpRequest("posts", "https://jsonplaceholder.typicode.com/posts");
-        private static HttpRequest RequestUsers = new HttpRequest("users", "https://jsonplaceholder.typicode.com/users");
-        private static HttpRequest RequestComments = new HttpRequest("comments", "https://jsonplaceholder.typicode.com/comments");
-
         public static void Main(string[] args)
         {
             Bootstrap().Wait();
@@ -81,70 +101,91 @@ namespace Cycle.Net.Sample
             });
         }
 
-        public static IObservable<ILogRequest> LogOnlineClient(IObservable<int> onlineClientStream) =>
-            onlineClientStream
-                .Select(counter => new LogRequest($"there are {counter} clients online."));
+        public static IObservable<AppState> AppStateStream(IObservable<ITcpResponse> tcpStream)
+        =>
+            tcpStream.ToState(new AppState());
 
-        public static IObservable<int> OnlineClientCounter(IObservable<ITcpResponse> tcpStream) =>
-            tcpStream
-                .Scan(0, (counter, response) =>
-                {
-                    switch (response)
-                    {
-                        case ClientConnected connected:
-                            return counter + 1;
-                        case ClientDisconnected disconnected:
-                            return counter - 1;
-                        default:
-                            return counter;
-                    }
-                })
-                .DistinctUntilChanged();
-
-        public static IObservable<IGroupedObservable<string, TcpClientState>> TcpClientStatesStream(IObservable<ITcpResponse> tcpStream) =>
+        public static IObservable<IGroupedObservable<string, TcpClientState>> TcpClientStatesStream(IObservable<ITcpResponse> tcpStream)
+        =>
             tcpStream
                 .GroupBy(response => response.ClientId)
                 .SelectMany(clientStream => clientStream
                        .TakeWhile(response => !(response is ClientDisconnected))
-                       .Select(TcpClientState.Reducer)
-                       .Scan(new TcpClientState(clientStream.Key), (state, reducer) => reducer(state)))
+                       .ToState(new TcpClientState(clientStream.Key)))
                 .GroupBy(state => state.Id);
 
-        public static IObservable<ITcpRequest> EchoBytesReceivedStream(IObservable<IGroupedObservable<string, TcpClientState>> clientStatesStream) =>
-            clientStatesStream
-                .SelectMany(stateStream => stateStream
-                                                .Skip(1) // ignore initial state
-                                                .Select(state => new ClientDataSend(
-                                                    state.Id,
-                                                    Unpooled.WrappedBuffer(Encoding.UTF8.GetBytes($"bytes received: {state.BytesReceived.ToString()}"))))
-                                                .Take(1) // echo once and kick
-                                                .Concat<ITcpRequest>(
-                                                    Observable.Return(new ClientKick(stateStream.Key))));
+        public static IObservable<ITcpRequest> HandleClientCommand(
+            IObservable<TcpClientCommand> clientCommandsStream,
+            string commandText,
+            Func<TcpClientCommand, ITcpRequest> selector)
+        =>
+            clientCommandsStream
+                .Where(command => command.Text.StartsWith(commandText))
+                .Select(selector);
 
-        public static IObservable<ILogRequest> LogHttpStream(IObservable<IHttpResponse> httpStream) =>
-            httpStream
-                .Select(response => new LogRequest($"http response: id={response.Origin.Id}"));
+        public static Func<TcpClientCommand, ITcpRequest> CmdSend(Func<TcpClientCommand, string> transform)
+        =>
+            command =>
+                new ClientDataSend(
+                    command.Client.Id,
+                    Unpooled.WrappedBuffer(Encoding.UTF8.GetBytes(transform(command) + "\n")));
+
+        public static Func<TcpClientCommand, ITcpRequest> CmdKick()
+        =>
+            command =>
+                new ClientKick(command.Client.Id);
 
         public static IObservable<IRequest> Flow(IObservable<IResponse> source)
         {
             var httpStream = source.OfType<IHttpResponse>();
             var tcpStream = source.OfType<ITcpResponse>();
-            var tcpClientsStream = TcpClientStatesStream(tcpStream);
-            var onlineCountStream = OnlineClientCounter(tcpStream);
+            var clientsStateStream = TcpClientStatesStream(tcpStream);
 
-            var tcpSink = EchoBytesReceivedStream(tcpClientsStream);
-            var httpSink = new[]
-            {
-                RequestUsers,
-                RequestPosts,
-                RequestComments
-            }.ToObservable();
+            var clientsCommandsStream = clientsStateStream
+                .Select(clientStateStream =>
+                            tcpStream
+                                .OfType<ClientDataReceived>()
+                                .Where(response => response.ClientId == clientStateStream.Key)
+                                .Select(response => response.Buffer)
+                                .WithLatestFrom(
+                                    clientStateStream,
+                                    (buffer, state) =>
+                                        new TcpClientCommand(
+                                            state,
+                                            ByteBufferUtil
+                                                .DecodeString(
+                                                    buffer,
+                                                    0,
+                                                    buffer.ReadableBytes,
+                                                    Encoding.UTF8)
+                                        )
+                                )
+                        );
 
-            var logOnlineCount = LogOnlineClient(onlineCountStream);
-            var logHttpSink = LogHttpStream(httpStream);
-            var logSink = Observable.Merge(logHttpSink, logOnlineCount);
+            var tcpSink = clientsCommandsStream
+                .SelectMany(
+                    commandsStream =>
+                        Observable.Merge(
+                            HandleClientCommand(
+                                commandsStream,
+                                "bytes",
+                                CmdSend(command =>
+                                    $"total bytes received: {command.Client.BytesReceived}")),
+                            HandleClientCommand(
+                                commandsStream,
+                                "messages",
+                                CmdSend(command =>
+                                    $"nb of msg received: {command.Client.MessagesReceived}")
+                            ),
+                            HandleClientCommand(
+                                commandsStream,
+                                "bye",
+                                CmdKick()
+                            )
+                        )
+                );
 
-            return Observable.Merge<IRequest>(tcpSink, httpSink, logSink);
+            return tcpSink;
         }
     }
 }

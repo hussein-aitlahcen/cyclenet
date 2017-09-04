@@ -5,6 +5,7 @@
     <ProjectReference Include="..\Cycle.Net.Http\Cycle.Net.Http.csproj" />
     <ProjectReference Include="..\Cycle.Net.Tcp\Cycle.Net.Tcp.csproj" />
     <ProjectReference Include="..\Cycle.Net.Log\Cycle.Net.Log.csproj" />
+    <ProjectReference Include="..\Cycle.Net.State\Cycle.Net.State.csproj" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="DotNetty.Handlers" Version="0.4.6" />
