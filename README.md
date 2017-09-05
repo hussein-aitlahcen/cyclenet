@@ -16,31 +16,13 @@ Feel free to fork and make PR, any help will be appreciated !
 ## Sample
  The [Sample](https://github.com/hussein-aitlahcen/cyclenet/tree/master/Cycle.Net.Sample) is an exemple of pure dataflow, fully functionnal, immutable and side-effects free (function **Flow**)
 
-This example send three requests to fetch api data, accept connections ont localhost:5000 and echo back total bytes received.
+This example accept connections on **localhost:5000** and allow you to send commands like:
+
+* **bytes** : returns total bytes received
+* **messages** : returns nb of messages received
+* **bye** : kick yourself
+
 ```csharp
-using Driver = IObservable<IResponse>;
-using DriverMaker = Func<IObservable<IRequest>, IObservable<IResponse>>;
-using Drivers = Dictionary<string, Func<IObservable<IRequest>, IObservable<IResponse>>>;
-
-public sealed class AppState : AbstractReducableState<AppState>
-{
-    public ImmutableList<string> Clients { get; }
-    public AppState() : this(ImmutableList.Create<string>()) { }
-    public AppState(ImmutableList<string> clients) => Clients = clients;
-    public override AppState Reduce(IResponse response)
-    {
-        switch (response)
-        {
-            case ClientConnected connected:
-                return new AppState(Clients.Add(connected.ClientId));
-            case ClientDisconnected disconnected:
-                return new AppState(Clients.Remove(disconnected.ClientId));
-            default:
-                return this;
-        }
-    }
-}
-
 public sealed class TcpClientState : AbstractReducableState<TcpClientState>
 {
     public string Id { get; }
@@ -80,6 +62,17 @@ public sealed class TcpClientCommand
     }
 }
 
+public sealed class CommandHandler
+{
+    public string Text { get; }
+    public Func<TcpClientCommand, ITcpRequest> Selector { get; }
+    public CommandHandler(string text, Func<TcpClientCommand, ITcpRequest> selector)
+    {
+        Text = text;
+        Selector = selector;
+    }
+}
+
 public class Program
 {
     public static void Main(string[] args)
@@ -98,11 +91,8 @@ public class Program
         });
     }
 
-    public static IObservable<AppState> AppStateStream(IObservable<ITcpResponse> tcpStream)
-    =>
-        tcpStream.ToState(new AppState());
-
-    public static IObservable<IGroupedObservable<string, TcpClientState>> TcpClientStatesStream(IObservable<ITcpResponse> tcpStream)
+    public static IObservable<IGroupedObservable<string, TcpClientState>> ClientsStateStream(
+        IObservable<ITcpResponse> tcpStream)
     =>
         tcpStream
             .GroupBy(response => response.ClientId)
@@ -111,14 +101,40 @@ public class Program
                     .ToState(new TcpClientState(clientStream.Key)))
             .GroupBy(state => state.Id);
 
-    public static IObservable<ITcpRequest> HandleClientCommand(
-        IObservable<TcpClientCommand> clientCommandsStream,
-        string commandText,
-        Func<TcpClientCommand, ITcpRequest> selector)
+    public static IObservable<IObservable<TcpClientCommand>> ClientsCommandsStream(
+        IObservable<ITcpResponse> tcpStream,
+        IObservable<IGroupedObservable<string, TcpClientState>> tcpClientsStateStream)
     =>
-        clientCommandsStream
-            .Where(command => command.Text.StartsWith(commandText))
-            .Select(selector);
+        tcpClientsStateStream
+            .Select(clientStateStream =>
+                            tcpStream
+                                .OfType<ClientDataReceived>()
+                                .Where(response => response.ClientId == clientStateStream.Key)
+                                .Select(response => response.Buffer)
+                                .Select(buffer => ByteBufferUtil
+                                                    .DecodeString(
+                                                        buffer,
+                                                        0,
+                                                        buffer.ReadableBytes,
+                                                        Encoding.UTF8))
+                                .WithLatestFrom(
+                                    clientStateStream,
+                                    (text, client) =>
+                                        new TcpClientCommand(
+                                            client,
+                                            text
+                                        )
+                                )
+                        );
+
+    public static IObservable<ITcpRequest> HandleClientCommands(
+        IObservable<TcpClientCommand> clientCommandsStream,
+        IObservable<CommandHandler> commandHandlers)
+    =>
+        commandHandlers
+            .SelectMany(handler => clientCommandsStream
+                                    .Where(command => command.Text.StartsWith(handler.Text))
+                                    .Select(handler.Selector));
 
     public static Func<TcpClientCommand, ITcpRequest> CmdSend(Func<TcpClientCommand, string> transform)
     =>
@@ -134,53 +150,20 @@ public class Program
 
     public static IObservable<IRequest> Flow(IObservable<IResponse> source)
     {
-        var httpStream = source.OfType<IHttpResponse>();
         var tcpStream = source.OfType<ITcpResponse>();
-        var clientsStateStream = TcpClientStatesStream(tcpStream);
 
-        var clientsCommandsStream = clientsStateStream
-            .Select(clientStateStream =>
-                        tcpStream
-                            .OfType<ClientDataReceived>()
-                            .Where(response => response.ClientId == clientStateStream.Key)
-                            .Select(response => response.Buffer)
-                            .WithLatestFrom(
-                                clientStateStream,
-                                (buffer, state) =>
-                                    new TcpClientCommand(
-                                        state,
-                                        ByteBufferUtil
-                                            .DecodeString(
-                                                buffer,
-                                                0,
-                                                buffer.ReadableBytes,
-                                                Encoding.UTF8)
-                                    )
-                            )
-                    );
+        var clientsStateStream = ClientsStateStream(tcpStream);
 
-        var tcpSink = clientsCommandsStream
-            .SelectMany(
-                commandsStream =>
-                    Observable.Merge(
-                        HandleClientCommand(
-                            commandsStream,
-                            "bytes",
-                            CmdSend(command =>
-                                $"total bytes received: {command.Client.BytesReceived}")),
-                        HandleClientCommand(
-                            commandsStream,
-                            "messages",
-                            CmdSend(command =>
-                                $"nb of msg received: {command.Client.MessagesReceived}")
-                        ),
-                        HandleClientCommand(
-                            commandsStream,
-                            "bye",
-                            CmdKick()
-                        )
-                    )
-            );
+        var clientsCommandsStream = ClientsCommandsStream(tcpStream, clientsStateStream);
+
+        var handlersStream = new[]
+        {
+            new CommandHandler("bytes", CmdSend(command => $"total bytes received: {command.Client.BytesReceived}")),
+            new CommandHandler("messages", CmdSend(command => $"nb of msg received: {command.Client.MessagesReceived}")),
+            new CommandHandler("bye", CmdKick())
+        }.ToObservable();
+
+        var tcpSink = HandleClientCommands(clientsCommandsStream.Merge(), handlersStream);
 
         return tcpSink;
     }
