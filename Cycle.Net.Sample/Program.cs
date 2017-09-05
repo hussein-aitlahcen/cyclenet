@@ -21,39 +21,39 @@ using Cycle.Net.State;
 
 namespace Cycle.Net.Sample
 {
-    public sealed class TcpClientState : AbstractReducableState<TcpClientState>
+    public sealed class ClientState : AbstractReducableState<ClientState>
     {
         public string Id { get; }
         public int BytesReceived { get; }
         public int MessagesReceived { get; }
-        public TcpClientState(string id) : this(id, 0, 0)
+        public ClientState(string id) : this(id, 0, 0)
         {
         }
 
-        public TcpClientState(string id, int bytesReceived, int messagesReceived)
+        public ClientState(string id, int bytesReceived, int messagesReceived)
         {
             Id = id;
             BytesReceived = bytesReceived;
             MessagesReceived = messagesReceived;
         }
 
-        public override TcpClientState Reduce(IResponse response)
+        public override ClientState Reduce(IResponse response)
         {
             switch (response)
             {
                 case ClientDataReceived received:
-                    return new TcpClientState(Id, BytesReceived + received.Buffer.ReadableBytes, MessagesReceived + 1);
+                    return new ClientState(Id, BytesReceived + received.Buffer.ReadableBytes, MessagesReceived + 1);
                 default:
                     return this;
             }
         }
     }
 
-    public sealed class TcpClientCommand
+    public sealed class ClientCommand
     {
-        public TcpClientState Client { get; }
+        public ClientState Client { get; }
         public string Text { get; }
-        public TcpClientCommand(TcpClientState client, string text)
+        public ClientCommand(ClientState client, string text)
         {
             Client = client;
             Text = text;
@@ -63,8 +63,8 @@ namespace Cycle.Net.Sample
     public sealed class CommandHandler
     {
         public string Text { get; }
-        public Func<TcpClientCommand, ITcpRequest> Selector { get; }
-        public CommandHandler(string text, Func<TcpClientCommand, ITcpRequest> selector)
+        public Func<ClientCommand, ITcpRequest> Selector { get; }
+        public CommandHandler(string text, Func<ClientCommand, ITcpRequest> selector)
         {
             Text = text;
             Selector = selector;
@@ -89,44 +89,44 @@ namespace Cycle.Net.Sample
             });
         }
 
-        public static IObservable<IGroupedObservable<string, TcpClientState>> ClientsStateStream(
+        public static IObservable<IGroupedObservable<string, ClientState>> ClientsStateStream(
             IObservable<ITcpResponse> tcpStream)
         =>
             tcpStream
                 .GroupBy(response => response.ClientId)
                 .SelectMany(clientStream => clientStream
                        .TakeWhile(response => !(response is ClientDisconnected))
-                       .ToState(new TcpClientState(clientStream.Key)))
+                       .ToState(new ClientState(clientStream.Key)))
                 .GroupBy(state => state.Id);
 
-        public static IObservable<IObservable<TcpClientCommand>> ClientsCommandsStream(
+        public static IObservable<IObservable<ClientCommand>> ClientsCommandsStream(
             IObservable<ITcpResponse> tcpStream,
-            IObservable<IGroupedObservable<string, TcpClientState>> tcpClientsStateStream)
+            IObservable<IGroupedObservable<string, ClientState>> clientsStateStream)
         =>
-            tcpClientsStateStream
+            clientsStateStream
                 .Select(clientStateStream =>
-                                tcpStream
-                                    .OfType<ClientDataReceived>()
-                                    .Where(response => response.ClientId == clientStateStream.Key)
-                                    .Select(response => response.Buffer)
-                                    .Select(buffer => ByteBufferUtil
-                                                        .DecodeString(
-                                                            buffer,
-                                                            0,
-                                                            buffer.ReadableBytes,
-                                                            Encoding.UTF8))
-                                    .WithLatestFrom(
-                                        clientStateStream,
-                                        (text, client) =>
-                                            new TcpClientCommand(
-                                                client,
-                                                text
-                                            )
-                                    )
-                            );
+                            tcpStream
+                                .OfType<ClientDataReceived>()
+                                .Where(response => response.ClientId == clientStateStream.Key)
+                                .Select(response => response.Buffer)
+                                .Select(buffer => ByteBufferUtil
+                                                    .DecodeString(
+                                                        buffer,
+                                                        0,
+                                                        buffer.ReadableBytes,
+                                                        Encoding.UTF8))
+                                .WithLatestFrom(
+                                    clientStateStream,
+                                    (text, client) =>
+                                        new ClientCommand(
+                                            client,
+                                            text
+                                        )
+                                )
+                        );
 
         public static IObservable<ITcpRequest> HandleClientCommands(
-            IObservable<TcpClientCommand> clientCommandsStream,
+            IObservable<ClientCommand> clientCommandsStream,
             IObservable<CommandHandler> commandHandlers)
         =>
             commandHandlers
@@ -134,14 +134,14 @@ namespace Cycle.Net.Sample
                                         .Where(command => command.Text.StartsWith(handler.Text))
                                         .Select(handler.Selector));
 
-        public static Func<TcpClientCommand, ITcpRequest> CmdSend(Func<TcpClientCommand, string> transform)
+        public static Func<ClientCommand, ITcpRequest> CmdSend(Func<ClientCommand, string> transform)
         =>
             command =>
                 new ClientDataSend(
                     command.Client.Id,
                     Unpooled.WrappedBuffer(Encoding.UTF8.GetBytes(transform(command) + "\n")));
 
-        public static Func<TcpClientCommand, ITcpRequest> CmdKick()
+        public static Func<ClientCommand, ITcpRequest> CmdKick()
         =>
             command =>
                 new ClientKick(command.Client.Id);
